@@ -5,7 +5,7 @@ import random
 import os
 from datetime import datetime
 
-# 1. إعدادات الصفحة والهوية البصرية وتحسين الألوان (🎨 تحسين الجاذبية البصرية)
+# 1. إعدادات الصفحة والهوية البصرية وتحسين الألوان
 st.set_page_config(
     page_title="منصة هيا للمسابقات الاحترافية | Haya-Quiz Pro", 
     page_icon="🎮", 
@@ -28,13 +28,11 @@ st.markdown("""
     .msg-box-player { background-color: #FFFFFF; padding: 8px 12px; border-radius: 8px; margin: 5px 0; text-align: right; align-self: flex-start; max-width: 80%; }
     .message-box { background-color: #F3F4F6; border-right: 5px solid #4F46E5; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9rem; color: #374151; }
     .leaderboard-box { background: linear-gradient(135deg, #6EE7B7 0%, #3B82F6 100%); padding: 20px; border-radius: 12px; color: white; text-align: center; font-weight: bold; font-size: 1.5rem; }
-    
-    /* توقيع أسفل الصفحة الثابت والفخم */
     .footer-text { text-align: center; color: #9CA3AF; font-size: 1rem; font-weight: 500; padding: 20px 0; border-top: 1px solid #E5E7EB; margin-top: 50px; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. تفعيل الذاكرة الدائمة المحصنة في السيرفر (💾 التخزين الدائم للأسئلة والزوار والرسائل للضيوف)
+# 2. تفعيل الذاكرة الدائمة المحصنة في السيرفر لضمان بقاء البيانات للضيوف دائماً
 @st.cache_resource
 def get_server_db():
     return {
@@ -49,7 +47,7 @@ def get_server_db():
 
 db = get_server_db()
 
-# محرك العداد الذكي للزوار (📊 عدّاد زوار الموقع)
+# محرك العداد الذكي للزوار
 if 'counted' not in st.session_state:
     db["total_visitors"] += 1
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -88,34 +86,31 @@ with navbar_cols[1]:
 
 st.write("---")
 
-# 📥 خانة المالك (لوحة المطور) مستقلة ومحمية بالكامل على اليسار (Sidebar)
+# 📥 لوحة المالك المستقلة في القائمة الجانبية (Sidebar)
 with st.sidebar:
     st.markdown("### ⚙️ لوحة المالك (أدمن)")
     
     if not st.session_state.admin_authenticated:
         admin_pass = st.text_input("أدخل الرقم السري للمالك الخفي:", type="password")
         if st.button("🔓 فتح لوحة التحكم"):
-            if admin_pass == "Abdulelah@2026":  # 🔒 تأمين حساب المالك برقم سري قوي
+            if admin_pass == "Abdulelah@2026":
                 st.session_state.admin_authenticated = True
                 st.success("تم الدخول بنجاح!")
                 st.rerun()
             else:
                 st.error("❌ الرقم السري غير صحيح!")
     else:
-        # زر تسجيل الخروج الثابت (🚪 لوق اوت)
         if st.button("🚪 تسجيل الخروج من اللوحة"):
             st.session_state.admin_authenticated = False
             st.rerun()
             
         st.write("---")
-        # عرض عداد الزوار بشكل واضح مع التشارت (📊 عدّاد زوار الموقع)
         st.metric(label="📊 عدد زوار الموقع الكلي", value=f"{db['total_visitors']} زائر")
         if db["visitor_history"]:
             df_v = pd.DataFrame(list(db["visitor_history"].items()), columns=["التاريخ", "الزيارات"])
             st.line_chart(df_v.set_index("التاريخ"), height=130)
             
         st.write("---")
-        # رفع الأسئلة للأطفال وللكبار لتبقى في السيرفر دائماً للضيوف
         st.markdown("📂 **تحميل وحفظ الأسئلة الدائمة**")
         k_file = st.file_uploader("إكسيل الأطفال:", type=["xlsx"], key="side_k")
         if k_file: 
@@ -128,7 +123,6 @@ with st.sidebar:
             st.success(f"✅ تم الحفظ بالسيرفر ({len(db['adults_q'])} سؤال)")
         
         st.write("---")
-        # كتابة سؤال يدوي وإدراجه في المسابقة الحية للمتسابقين
         st.markdown("📝 **كتابة سؤال يدوي جديد**")
         with st.form("side_manual_form", clear_on_submit=True):
             mq = st.text_input("نص السؤال:")
@@ -142,7 +136,6 @@ with st.sidebar:
                     st.success("🎯 تم الحفظ وسيظهر بالجولة!")
                 
         st.write("---")
-        # صندوق وارد الرسائل (تواصل معنا) يسار الصفحة
         st.markdown("📬 **صندوق وارد الرسائل**")
         if not db["messages"]: 
             st.info("الصندوق فارغ حالياً.")
@@ -154,7 +147,12 @@ if st.session_state.curr_page == "home":
     st.markdown("<h2 style='text-align:center; color:#4F46E5;'>منصة مسابقات هيا العائلية 🎯</h2>", unsafe_allow_html=True)
     col_l_img, col_r_btn = st.columns([1, 2])
     with col_l_img:
-        st.image("my_kids.png", use_container_width=True) if os.path.exists("my_kids.png") else st.info("🎮 تحدي المسابقات العائلية")
+        # [تصحيح صريح هنا لمنع الخطأ التشوهي الظاهر بالصورة نهائياً]
+        if os.path.exists("my_kids.png"):
+            st.image("my_kids.png", use_container_width=True)
+        else:
+            st.info("🎮 تحدي المسابقات العائلية الحية")
+            
     with col_r_btn:
         st.write("### جاهزون للتحدي والمنافسة الحية الحين؟")
         col_b1, col_b2 = st.columns(2)
@@ -169,7 +167,7 @@ if st.session_state.curr_page == "home":
         with col_b4:
             st.info("👥 طور المجموعات والفرق قيد التأسيس")
 
-# صفحة تواصل معنا (📬 ربطها بصندوق الوارد ليسار المالك)
+# صفحة تواصل معنا
 elif st.session_state.curr_page == "contact_mode":
     st.markdown("### 📞 صفحة تواصل معنا")
     with st.form("contact"):
@@ -180,7 +178,7 @@ elif st.session_state.curr_page == "contact_mode":
                 db["messages"].append({"name": c_name, "msg": c_msg_txt})
                 st.success("🎉 تم الإرسال بنجاح! وذهبت لصندوق وارد المالك على اليسار.")
 
-# إدارة مسابقة حية (المدير في المنتصف كما كان)
+# إدارة مسابقة حية
 elif st.session_state.curr_page == "admin_mode":
     st.markdown("<h2 style='text-align:center;'>🏆 لوحة الموجه وإدارة المسابقات الحية</h2>", unsafe_allow_html=True)
     if 'my_live_room' not in st.session_state:
@@ -223,7 +221,6 @@ elif st.session_state.curr_page == "admin_mode":
                         rem = max(0, int(rdata["duration"] - (time.time() - rdata["q_start_time"])))
                         st.warning(f"⏱️ العداد التنازلي المتزامن: {rem} ثانية متبقية.")
                         
-                        # الانتقال التلقائي والديركت للسؤال التالي فور انتهاء الوقت
                         if rem <= 0:
                             db["rooms"][rid]["current_q_idx"] += 1; db["rooms"][rid]["q_start_time"] = time.time(); db["rooms"][rid]["answered_players"] = []; st.rerun()
                         if st.button("➡️ السؤال التالي يدوياً"):
@@ -235,7 +232,6 @@ elif st.session_state.curr_page == "admin_mode":
                     st.markdown("<div class='leaderboard-box'>🏆 لوحة الصدارة النهائية والداشبورد 🏆</div>", unsafe_allow_html=True)
                     sorted_sc = sorted(rdata["scores"].items(), key=lambda x: x[1], reverse=True)
                     
-                    # عرض تشارت ورسم بياني مرضي وفخم للترتيب
                     df_chart = pd.DataFrame(sorted_sc, columns=["المتسابق", "النقاط"])
                     st.bar_chart(df_chart, x="المتسابق", y="النقاط")
                     for rank, (p, s) in enumerate(sorted_sc):
@@ -246,7 +242,7 @@ elif st.session_state.curr_page == "admin_mode":
                     del st.session_state.my_live_room; st.session_state.generated_room_code = None; st.rerun()
             with col_r: show_live_chat(rid, "المدير", is_admin=True)
 
-# دخول كمتسابق (الأبناء)
+# دخول كمتسابق
 elif st.session_state.curr_page == "player_mode":
     st.header("🕹️ شاشة انضمام المتسابقين الأبطال")
     if 'joined_live_room' not in st.session_state:
@@ -277,7 +273,6 @@ elif st.session_state.curr_page == "player_mode":
                         rem = max(0, int(rdata["duration"] - (time.time() - rdata["q_start_time"])))
                         st.warning(f"⏳ متبقي عندك للتفكير: {rem} ثانية!")
                         
-                        # إشعار الخطأ التلقائي وتثقيف الطفل فور انتهاء الوقت
                         if rem <= 0:
                             st.error("❌ انتهى الوقت المخصص للحل! لقد أخطأت في حل هذا السؤال.")
                             st.info(f"💡 المعلومة الصحيحة لتثقيفك هي: **{c_ans}**")
@@ -296,7 +291,7 @@ elif st.session_state.curr_page == "player_mode":
                         st.write(f"### 🎉 البطل {k}: حصد **{v}** نقطة كاملة!")
             with col_r: show_live_chat(rid, pname, is_admin=False)
 
-# نمط اختبر نفسك الفردي (🧠 دي اكتيفيت وتأمين مدمج)
+# نمط اختبر نفسك الفردي
 elif st.session_state.curr_page == "culture_mode":
     st.markdown("### 🧠 نمط اختبر نفسك الفردي وثقف ذاتك")
     if st.button("↩️ العودة للرئيسية"): 
@@ -306,7 +301,6 @@ elif st.session_state.curr_page == "culture_mode":
     c_status = st.session_state.individual_challenge["status"]
     if c_status == "idle":
         q_choice = st.radio("اختر القسم الثقافي المتاح:", ["قسم الأطفال 👶", "قسم الكبار 🧔 (غير مفعل الحين)"])
-        # 🧠 تعطيل قسم الكبار (Deactivate) تلقائياً ومنع خلطه مع أسئلة الأطفال
         if "الكبار" in q_choice and not db["adults_q"]: 
             st.error("⚠️ هذا القسم معطل حالياً (Deactivated) لعدم رفع ملف أسئلة الكبار من لوحة المالك على اليسار.")
         else:
@@ -332,5 +326,5 @@ elif st.session_state.curr_page == "culture_mode":
     elif c_status == "finished":
         st.success(f"🏆 النتيجة النهائية: لقد أجبت بشكل صحيح على {st.session_state.individual_challenge['correct_ans']} من أصل {len(st.session_state.individual_challenge['q_list'])} سؤال!")
 
-# 5. تذييل الحقوق والتوقيع الثابت بالعربي والإنجليزي (✍️ توقيع أسفل الصفحة)
+# 5. تذييل الحقوق والتوقيع الثابت بالعربي والإنجليزي
 st.markdown("<div class='footer-text'>تطوير عبد الإله العنزي | Developed by Abdulelah Al-Anzi</div>", unsafe_allow_html=True)
