@@ -4,7 +4,7 @@ import time
 import random
 from datetime import datetime
 
-# 1. إعدادات الصفحة والهوية البصرية الفخمة للمنصة
+# 1. إعدادات الصفحة والهوية البصرية
 st.set_page_config(
     page_title="منصة هيا للمسابقات الاحترافية | Haya-Quiz Pro", 
     page_icon="🎮", 
@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تخصيص واجهة الشات وتنسيق فقاعات الواتساب عبر CSS
+# تخصيص واجهة الشات والفقاعات عبر CSS
 st.markdown("""
     <style>
     .main-title { text-align: center; color: #4F46E5; font-size: 2.8rem; font-weight: bold; margin-bottom: 5px; }
@@ -20,26 +20,19 @@ st.markdown("""
     .stRadio > div { flex-direction: row; justify-content: center; }
     div.stButton > button:first-child { background-color: #4F46E5; color: white; border-radius: 8px; border: none; font-size: 1rem; }
     div.stButton > button:first-child:hover { background-color: #4338CA; }
-    
-    /* تنسيق فقاعات المحادثة الشبيه بالواتساب */
     .chat-container { background-color: #E5DDD5; padding: 15px; border-radius: 12px; max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; }
     .msg-box-admin { background-color: #DCF8C6; padding: 8px 12px; border-radius: 8px; margin: 5px 0; text-align: right; align-self: flex-end; max-width: 80%; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
     .msg-box-player { background-color: #FFFFFF; padding: 8px 12px; border-radius: 8px; margin: 5px 0; text-align: right; align-self: flex-start; max-width: 80%; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
     .msg-user { font-weight: bold; font-size: 0.85rem; color: #075E54; display: block; margin-bottom: 3px; }
     .msg-time { font-size: 0.7rem; color: #999; text-align: left; display: block; margin-top: 3px; }
-    
-    /* تنسيق شريط النقل العلوي */
-    .nav-bar { display: flex; justify-content: center; gap: 20px; background-color: #F9FAFB; padding: 10px; border-radius: 8px; border: 1px solid #E5E7EB; margin-bottom: 20px; }
-    .nav-link { text-decoration: none; color: #4B5563; font-weight: bold; font-size: 1.1rem; cursor: pointer; padding: 5px 10px; border-radius: 5px; }
-    .nav-link:hover { background-color: #E5E7EB; color: #111827; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. إنشاء مخزن بيانات ثابت على السيرفر للمزامنة الحقيقية
+# 2. إنشاء مخزن بيانات مشترك وعام على السيرفر يراه الجميع تلقائياً
 if 'global_rooms_v2' not in st.session_state: st.session_state.global_rooms_v2 = {}
-if 'kids_q_v2' not in st.session_state: st.session_state.kids_q_v2 = []
-if 'adults_q_v2' not in st.session_state: st.session_state.adults_q_v2 = []
-if 'manual_q_v2' not in st.session_state: st.session_state.manual_q_v2 = []
+if 'global_kids_q' not in st.session_state: st.session_state.global_kids_q = []
+if 'global_adults_q' not in st.session_state: st.session_state.global_adults_q = []
+if 'global_manual_q' not in st.session_state: st.session_state.global_manual_q = []
 
 if 'individual_challenge' not in st.session_state:
     st.session_state.individual_challenge = {
@@ -48,7 +41,6 @@ if 'individual_challenge' not in st.session_state:
 
 if 'curr_page' not in st.session_state: st.session_state.curr_page = "home"
 
-# دالة التحديث الجزئي (Fragment) لتحديث الشات بهدوء بدون وميض الصفحة
 @st.fragment
 def show_live_chat(room_id, user_name, is_admin):
     room_ref = st.session_state.global_rooms_v2.get(room_id)
@@ -96,7 +88,7 @@ with navbar_cols[1]:
 
 st.write("---")
 
-# القائمة الجانبية (Sidebar) لـ "رقم الأدمن واللغة" بنفس تصميم أمس
+# القائمة الجانبية (Sidebar)
 with st.sidebar:
     st.markdown("### 🌐 اللغة / Language")
     main_ui_lang = st.selectbox("اختر لغة الموقع:", ["SA العربية", "US English"])
@@ -106,7 +98,7 @@ with st.sidebar:
     admin_input_pass = st.text_input("أدخل الرقم السري للمطور فتح بنك الأسئلة:", type="password")
     
     if admin_input_pass == "1234":
-        st.success("🔓 وضع المطور عبد الإله نشط")
+        st.success("🔓 وضع المطور نشط")
         tab_b1, tab_b2, tab_b3 = st.tabs([" قسم أسئلة الأطفال", " قسم أسئلة الكبار", "📝 سؤال يدوي"])
         
         with tab_b1:
@@ -114,8 +106,9 @@ with st.sidebar:
             kids_f_in = st.file_uploader("Upload Children Excel", type=["xlsx"], key="main_k")
             if kids_f_in:
                 try:
-                    st.session_state.kids_q_v2 = pd.read_excel(kids_f_in).to_dict(orient='records')
-                    st.success(f"✅ تم اعتماد أسئلة الأطفال ({len(st.session_state.kids_q_v2)} سؤال)")
+                    # حفظ في الذاكرة العامة ليتزامن عند الجميع فوراً
+                    st.session_state.global_kids_q = pd.read_excel(kids_f_in).to_dict(orient='records')
+                    st.success(f"✅ اعتُمدت ونُشرت للجميع ({len(st.session_state.global_kids_q)} سؤال)")
                 except: st.error("خطأ في الملف.")
         
         with tab_b2:
@@ -123,8 +116,8 @@ with st.sidebar:
             adults_f_in = st.file_uploader("Upload Adults Excel", type=["xlsx"], key="main_a")
             if adults_f_in:
                 try:
-                    st.session_state.adults_q_v2 = pd.read_excel(adults_f_in).to_dict(orient='records')
-                    st.success(f"✅ تم اعتماد أسئلة الكبار ({len(st.session_state.adults_q_v2)} سؤال)")
+                    st.session_state.global_adults_q = pd.read_excel(adults_f_in).to_dict(orient='records')
+                    st.success(f"✅ اعتُمدت ونُشرت للجميع ({len(st.session_state.global_adults_q)} سؤال)")
                 except: st.error("خطأ في الملف.")
                 
         with tab_b3:
@@ -138,19 +131,17 @@ with st.sidebar:
                 iu = st.text_input("رابط الصورة التوضيحية:")
                 if st.form_submit_button("➕ حفظ السؤال"):
                     if mt and o1 and ca:
-                        st.session_state.manual_q_v2.append({
+                        st.session_state.global_manual_q.append({
                             "السؤال": mt, "الخيار 1": o1, "الخيار 2": o2, "الخيار 3": o3, "الخيار 4": o4,
                             "الإجابة الصحيحة": ca, "الصورة": iu if iu else None
                         })
-                        st.success("🎯 تم الحفظ بنجاح!")
+                        st.success("🎯 تم الحفظ والنشر للجميع!")
 
-# الصفحة الرئيسية الأصلية الفخمة
+# الصفحة الرئيسية
 if st.session_state.curr_page == "home":
     col_left_img, col_right_content = st.columns([1, 2])
-    
     with col_left_img:
         st.image("my_kids.png", use_container_width=True)
-        
     with col_right_content:
         st.markdown("<h2 style='color: #4F46E5;'>منصة مسابقات هيا العائلية 🎯</h2>", unsafe_allow_html=True)
         st.markdown("<p style='font-size:1.2rem;'>🔥 أهلاً بالأبطال الغاليين.. جاهزين للتحدي والمنافسة؟</p>", unsafe_allow_html=True)
@@ -159,24 +150,21 @@ if st.session_state.curr_page == "home":
         col_m1, col_m2, col_m3 = st.columns(3)
         with col_m1:
             st.markdown("🏆 **إدارة مسابقة حية**")
-            st.write("أنشئ غرفة مسابقة جديدة والتحكم بالأسئلة")
             if st.button("أنشئ مسابقة الآن"):
                 st.session_state.curr_page = "admin_mode"
                 st.rerun()
         with col_m2:
             st.markdown("🎮 **دخول كمتسابق**")
-            st.write("أدخل الرمز الممنوح لك وانضم للتحدي فوراً")
             if st.button("انضم كمتسابق"):
                 st.session_state.curr_page = "player_mode"
                 st.rerun()
         with col_m3:
             st.markdown("🕹️ **التسابق الفردي**")
-            st.write("اختبر معلوماتك بشكل سريع واكتشف مستواك")
             if st.button("ابدأ اللعب الفردي"):
                 st.session_state.curr_page = "culture_mode"
                 st.rerun()
 
-# نمط إدارة مسابقة حية (المدير)
+# إدارة مسابقة حية (المدير)
 elif st.session_state.curr_page == "admin_mode":
     st.markdown("<h2 style='text-align:center;'>👑 إدارة مسابقة حية</h2>", unsafe_allow_html=True)
     if st.button("↩️ العودة للرئيسية"):
@@ -187,7 +175,8 @@ elif st.session_state.curr_page == "admin_mode":
     if 'my_live_room' not in st.session_state:
         col_setup1, col_setup2 = st.columns(2)
         with col_setup1:
-            q_src_v2 = st.radio("الفئة المستهدفة للعب:", ["أسئلة أطفال 👶 (غير مفعل)", "أسئلة بالغين 🧔 (غير مفعل)"])
+            # تصحيح الراديو ليلتقط البيانات المشتركة المرفوعة تلقائياً
+            q_src_v2 = st.radio("الفئة المستهدفة للعب:", ["أسئلة الأطفال", "أسئلة الكبار"])
             num_limit_v2 = st.number_input("عدد أسئلة الجولة:", min_value=1, max_value=100, value=10)
             max_players_v2 = st.number_input("عدد المتسابقين الحاضرين:", min_value=1, max_value=20, value=5)
         with col_setup2:
@@ -195,11 +184,11 @@ elif st.session_state.curr_page == "admin_mode":
             st.number_input("الدرجة المستحقة لكل سؤال:", value=10)
             
         if st.button("🎲 توليد الغرفة"):
-            pool_in = st.session_state.kids_q_v2 if "أطفال" in q_src_v2 else st.session_state.adults_q_v2
-            if not pool_in: pool_in = st.session_state.manual_q_v2
+            pool_in = st.session_state.global_kids_q if "الأطفال" in q_src_v2 else st.session_state.global_adults_q
+            if not pool_in: pool_in = st.session_state.global_manual_q
                 
             if not pool_in:
-                st.error("⚠️ بنك الأسئلة فارغ! يرجى رفع ملف إكسيل من القائمة الجانبية أولاً.")
+                st.error("⚠️ بنك الأسئلة فارغ! يرجى رفع ملف إكسيل من القائمة الجانبية أولاً لتظهر للجميع.")
             else:
                 current_code = str(random.randint(1000, 9999))
                 st.session_state.my_live_room = current_code
@@ -211,11 +200,9 @@ elif st.session_state.curr_page == "admin_mode":
     else:
         l_room = st.session_state.my_live_room
         r_data_in = st.session_state.global_rooms_v2.get(l_room)
-        
         if r_data_in:
             st.success(f"🎲 رقم الغرفة الحية المعتمد للأبناء هو: **{l_room}**")
             col_live, col_chat = st.columns([2, 1])
-            
             with col_live:
                 st.markdown("### 👥 المتسابقون بالانتظار:")
                 if not r_data_in["players"]: st.warning("🔄 بانتظار دخول الأبناء...")
@@ -248,7 +235,7 @@ elif st.session_state.curr_page == "admin_mode":
                 st.markdown("### 💬 المحادثة")
                 show_live_chat(l_room, "المدير", is_admin=True)
 
-# نمط دخول كمتسابق (الأبناء)
+# نمط دخول كمتسابق
 elif st.session_state.curr_page == "player_mode":
     st.header("🕹️ شاشة انضمام المتسابقين")
     if st.button("↩️ العودة للرئيسية"):
@@ -294,7 +281,6 @@ elif st.session_state.curr_page == "player_mode":
                         if ql[qi].get("الصورة") and pd.notna(ql[qi]["الصورة"]): st.image(ql[qi]["الصورة"])
                         opts = [str(ql[qi]["الخيار 1"]), str(ql[qi]["الخيار 2"]), str(ql[qi]["الخيار 3"]), str(ql[qi]["الخيار 4"])]
                         sel = st.radio("اختر إجابتك الصحيحة:", opts, key=f"p_opt_{qi}")
-                        st.warning(f"⏳ الوقت المتاح: {r_in['duration']} ثانية")
                         if st.button("✔️ اعتماد الإجابة"):
                             if sel == str(ql[qi]["الإجابة الصحيحة"]): st.balloons(); st.success("صح! بطل 🥳")
                             else: st.error(f"خطأ! الصح: {ql[qi]['الإجابة الصحيحة']}")
@@ -308,11 +294,8 @@ elif st.session_state.curr_page == "player_mode":
             with col_pc:
                 st.markdown("### 💬 شات المسابقة")
                 show_live_chat(ar_p, an_p, is_admin=False)
-        else:
-            st.warning("🛑 تم إغلاق الغرفة.")
-            if st.button("العودة الرئيسية"): del st.session_state.joined_live_room; st.rerun()
 
-# نمط اكتشف ثقافتك (تحدي اختبر نفسك الفردي)
+# نمط التسابق الفردي (اختبر نفسك)
 elif st.session_state.curr_page == "culture_mode":
     st.markdown("### 🧠 نمط اكتشف ثقافتك (اختبر نفسك)")
     if st.button("↩️ العودة للرئيسية"):
@@ -324,7 +307,9 @@ elif st.session_state.curr_page == "culture_mode":
     if c_status == "idle":
         st.write("اضغط على الزر لبدء تحدي الـ 15 سؤالاً وتحديد مستواك الثقافي فوراً.")
         if st.button("✨ ابدأ تحدي اختبر نفسك"):
-            pool = st.session_state.adults_q_v2 if st.session_state.adults_q_v2 else st.session_state.kids_q_v2
+            pool = st.session_state.global_adults_q if st.session_state.global_adults_q else st.session_state.global_kids_q
+            if not pool: pool = st.session_state.global_manual_q
+            
             if not pool: st.error("⚠️ يرجى رفع ملف أسئلة من المطور أولاً لتفعيل التحدي الفردي.")
             else:
                 st.session_state.individual_challenge["q_list"] = random.sample(pool, min(len(pool), 15))
