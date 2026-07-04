@@ -28,10 +28,16 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. تفعيل الذاكرة السحابية المحصنة والدائمة لربط جميع الأجهزة بدون تصفير نهائياً
+# أسئلة احتياطية موحدة البنية تماماً مع الإكسيل لمنع الـ KeyError
+DEFAULT_KIDS_Q = [
+    {"السؤال": "ما هو كوكب الأرض الأكثر قرباً إلى الشمس؟", "الخيار 1": "عطارد", "الخيار 2": "الزهرة", "الخيار 3": "المريخ", "الخيار 4": "المشتري", "الإجابة الصحيحة": "عطارد"},
+    {"السؤال": "ما اسم القوة التي تجذب الأشياء نحو الأرض؟", "الخيار 1": "الجاذبية", "الخيار 2": "الاحتكاك", "الخيار 3": "المغناطيسية", "الخيار 4": "الدفع", "الإجابة الصحيحة": "الجاذبية"}
+]
+
+# 2. تفعيل الذاكرة السحابية المحصنة والدائمة
 @st.cache_resource
 def get_global_db():
-    return {"rooms": {}, "kids_q": [], "adults_q": [], "manual_q": []}
+    return {"rooms": {}, "kids_q": DEFAULT_KIDS_Q, "adults_q": DEFAULT_KIDS_Q, "manual_q": []}
 
 db = get_global_db()
 
@@ -195,9 +201,13 @@ elif st.session_state.curr_page == "admin_mode":
                 
                 current_code = st.session_state.generated_room_code
                 st.session_state.my_live_room = current_code
+                
+                # [تعديل]: سحب الأسئلة بشكل عشوائي تماماً ومنوع في كل مرة تنشأ فيها غرفة
+                shuffled_questions = random.sample(pool_in, min(len(pool_in), int(num_limit_v2)))
+                
                 db["rooms"][current_code] = {
                     "players": [], "max_players": max_players_v2, "status": "waiting", "current_q_idx": 0,
-                    "questions": pool_in[:num_limit_v2], "chat_history": [], "duration": timer_q_val
+                    "questions": shuffled_questions, "chat_history": [], "duration": timer_q_val
                 }
                 st.rerun()
     else:
@@ -289,11 +299,18 @@ elif st.session_state.curr_page == "player_mode":
                         st.markdown(f"### ❓ السؤال {qi + 1}")
                         st.markdown(f"## {ql[qi]['السؤال']}")
                         if ql[qi].get("الصورة") and pd.notna(ql[qi]["الصورة"]): st.image(ql[qi]["الصورة"])
-                        opts = [str(ql[qi]["الخيار 1"]), str(ql[qi]["الخيار 2"]), str(ql[qi]["الخيار 3"]), str(ql[qi]["الخيار 4"])]
+                        
+                        # التثبيت والحماية هنا لضمان جلب المفاتيح من الإكسيل أو الاحتياطي بدون KeyError
+                        opts = [
+                            str(ql[qi].get("الخيار 1", "")), 
+                            str(ql[qi].get("الخيار 2", "")), 
+                            str(ql[qi].get("الخيار 3", "")), 
+                            str(ql[qi].get("الخيار 4", ""))
+                        ]
                         sel = st.radio("اختر إجابتك الصحيحة:", opts, key=f"p_opt_{qi}")
                         if st.button("✔️ اعتماد الإجابة"):
-                            if sel == str(ql[qi]["الإجابة الصحيحة"]): st.balloons(); st.success("صح! بطل 🥳")
-                            else: st.error(f"خطأ! الصح: {ql[qi]['الإجابة الصحيحة']}")
+                            if sel == str(ql[qi].get("الإجابة الصحيحة", "")): st.balloons(); st.success("صح! بطل 🥳")
+                            else: st.error(f"خطأ! الصح: {ql[qi].get('الإجابة الصحيحة', '')}")
                     else: st.success("🏁 انتهت الأسئلة!")
                 elif r_in["status"] == "finished": st.success("🏆 انتهت المسابقة!")
                 if st.button("🚪 انسحاب ومغادرة الغرفة"):
@@ -338,11 +355,11 @@ elif st.session_state.curr_page == "culture_mode":
         if qc < len(qlc):
             st.markdown(f"### ❓ السؤال {qc + 1} من {len(qlc)}")
             st.markdown(f"## {qlc[qc]['السؤال']}")
-            opts = [str(qlc[qc]["الخيار 1"]), str(qlc[qc]["الخيار 2"]), str(qlc[qc]["الخيار 3"]), str(qlc[qc]["الخيار 4"])]
+            opts = [str(qlc[qc].get("الخيار 1", "")), str(qlc[qc].get("الخيار 2", "")), str(qlc[qc].get("الخيار 3", "")), str(qlc[qc].get("الخيار 4", ""))]
             sel = st.radio("اختر الجواب:", opts, key=f"c_q_{qc}")
             if st.button("✔️ اعتماد"):
-                if sel == str(qlc[qc]["الإجابة الصحيحة"]): st.session_state.individual_challenge["correct_ans"] += 1; st.success("صح ✅")
-                else: st.error(f"خطأ ❌ الصح: {qlc[qc]['الإجابة الصحيحة']}")
+                if sel == str(qlc[qc].get("الإجابة الصحيحة", "")): st.session_state.individual_challenge["correct_ans"] += 1; st.success("صح ✅")
+                else: st.error(f"خطأ ❌ الصح: {qlc[qc].get('الإجابة الصحيحة', '')}")
                 st.session_state.individual_challenge["current_q"] += 1
                 if st.session_state.individual_challenge["current_q"] >= len(qlc): st.session_state.individual_challenge["status"] = "finished"
                 st.rerun()
