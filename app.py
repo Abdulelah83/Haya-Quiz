@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import time
 import random
-import os  # تـم إضـافـة الاسـتـيـراد هـنـا لـحـل الـخـطـأ فوراً
+import os
 from datetime import datetime
 
-# 1. إعدادات الصفحة والهوية البصرية
+# 1. إعدادات الصفحة والهوية البصرية وتحسين الألوان (🎨 تحسين الجاذبية البصرية)
 st.set_page_config(
     page_title="منصة هيا للمسابقات الاحترافية | Haya-Quiz Pro", 
     page_icon="🎮", 
@@ -13,35 +13,53 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تخصيص CSS
+# تخصيص CSS للمظهر الفخم والألوان الجذابة
 st.markdown("""
     <style>
     .main-title { text-align: center; color: #4F46E5; font-size: 2.8rem; font-weight: bold; margin-bottom: 5px; }
     .sub-title { text-align: center; color: #4B5563; font-size: 1.2rem; margin-bottom: 25px; }
-    .stRadio > div { flex-direction: row; justify-content: center; }
-    div.stButton > button:first-child { background-color: #4F46E5; color: white; border-radius: 8px; border: none; font-size: 1rem; }
-    div.stButton > button:first-child:hover { background-color: #4338CA; }
+    .stRadio > div { flex-direction: row; justify-content: center; gap: 15px; }
+    div.stButton > button:first-child { 
+        background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); 
+        color: white; border-radius: 12px; border: none; font-size: 1.1rem; padding: 10px 20px;
+    }
     .chat-container { background-color: #E5DDD5; padding: 15px; border-radius: 12px; max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; }
-    .msg-box-admin { background-color: #DCF8C6; padding: 8px 12px; border-radius: 8px; margin: 5px 0; text-align: right; align-self: flex-end; max-width: 80%; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
-    .msg-box-player { background-color: #FFFFFF; padding: 8px 12px; border-radius: 8px; margin: 5px 0; text-align: right; align-self: flex-start; max-width: 80%; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
-    .msg-user { font-weight: bold; font-size: 0.85rem; color: #075E54; display: block; margin-bottom: 3px; }
-    .msg-time { font-size: 0.7rem; color: #999; text-align: left; display: block; margin-top: 3px; }
-    .leaderboard-box { background: linear-gradient(135deg, #6EE7B7 0%, #3B82F6 100%); padding: 20px; border-radius: 12px; color: white; text-align: center; font-weight: bold; font-size: 1.5rem; margin-bottom: 20px; }
+    .msg-box-admin { background-color: #DCF8C6; padding: 8px 12px; border-radius: 8px; margin: 5px 0; text-align: right; align-self: flex-end; max-width: 80%; }
+    .msg-box-player { background-color: #FFFFFF; padding: 8px 12px; border-radius: 8px; margin: 5px 0; text-align: right; align-self: flex-start; max-width: 80%; }
+    .message-box { background-color: #F3F4F6; border-right: 5px solid #4F46E5; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9rem; color: #374151; }
+    .leaderboard-box { background: linear-gradient(135deg, #6EE7B7 0%, #3B82F6 100%); padding: 20px; border-radius: 12px; color: white; text-align: center; font-weight: bold; font-size: 1.5rem; }
+    
+    /* توقيع أسفل الصفحة الثابت والفخم */
+    .footer-text { text-align: center; color: #9CA3AF; font-size: 1rem; font-weight: 500; padding: 20px 0; border-top: 1px solid #E5E7EB; margin-top: 50px; }
     </style>
 """, unsafe_allow_html=True)
 
-# الذاكرة المحصنة
+# 2. تفعيل الذاكرة الدائمة المحصنة في السيرفر (💾 التخزين الدائم للأسئلة والزوار والرسائل للضيوف)
 @st.cache_resource
-def get_global_db():
-    return {"rooms": {}, "kids_q": [], "adults_q": [], "manual_q": []}
+def get_server_db():
+    return {
+        "rooms": {}, 
+        "kids_q": [], 
+        "adults_q": [], 
+        "manual_q": [], 
+        "messages": [], 
+        "total_visitors": 0, 
+        "visitor_history": {}
+    }
 
-db = get_global_db()
+db = get_server_db()
 
-if 'individual_challenge' not in st.session_state:
-    st.session_state.individual_challenge = {"status": "idle", "current_q": 0, "correct_ans": 0, "q_list": []}
+# محرك العداد الذكي للزوار (📊 عدّاد زوار الموقع)
+if 'counted' not in st.session_state:
+    db["total_visitors"] += 1
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    db["visitor_history"][today_str] = db["visitor_history"].get(today_str, 0) + 1
+    st.session_state.counted = True
 
+# تهيئة متغيرات الجلسة الأساسية
 if 'curr_page' not in st.session_state: st.session_state.curr_page = "home"
 if 'generated_room_code' not in st.session_state: st.session_state.generated_room_code = None
+if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
 
 @st.fragment
 def show_live_chat(room_id, user_name, is_admin):
@@ -50,21 +68,18 @@ def show_live_chat(room_id, user_name, is_admin):
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
     for chat_msg in room_ref["chat_history"]:
         msg_class = "msg-box-admin" if chat_msg["user_type"] == "admin" else "msg-box-player"
-        st.markdown(f"<div class='{msg_class}'><span class='msg-user'>{chat_msg['name']}</span>{chat_msg['text']}<span class='msg-time'>{chat_msg['time']}</span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='{msg_class}'><strong>{chat_msg['name']}:</strong> {chat_msg['text']}</div>", unsafe_allow_html=True)
     st.markdown("</div><br>", unsafe_allow_html=True)
-    
     with st.form(f"chat_form_{room_id}", clear_on_submit=True):
         col_c1, col_c2 = st.columns([4, 1])
-        c_text = col_c1.text_input("اكتب رسالة فورية:", label_visibility="collapsed", key=f"input_{room_id}")
+        c_text = col_c1.text_input("اكتب رسالة فورية:", label_visibility="collapsed", key=f"in_{room_id}")
         if col_c2.form_submit_button("إرسال"):
             if c_text:
-                curr_t = datetime.now().strftime("%H:%M")
-                db["rooms"][room_id]["chat_history"].append({"user_type": "admin" if is_admin else "player", "name": "المدير (أبو صالح)" if is_admin else user_name, "text": c_text, "time": curr_t})
+                db["rooms"][room_id]["chat_history"].append({"user_type": "admin" if is_admin else "player", "name": "المدير (أبو صالح)" if is_admin else user_name, "text": c_text})
                 st.rerun()
-    time.sleep(2)
-    st.rerun()
+    time.sleep(2); st.rerun()
 
-# الشريط العلوي الثابت
+# الشريط العلوي الثابت للمنصة
 navbar_cols = st.columns([1, 4, 1])
 with navbar_cols[1]:
     col_nav1, col_nav2 = st.columns(2)
@@ -73,293 +88,249 @@ with navbar_cols[1]:
 
 st.write("---")
 
-# القائمة الجانبية (Sidebar)
+# 📥 خانة المالك (لوحة المطور) مستقلة ومحمية بالكامل على اليسار (Sidebar)
 with st.sidebar:
-    st.markdown("### 🌐 الإعدادات")
-    main_ui_lang = st.selectbox("اختر لغة الموقع:", ["SA العربية", "US English"])
-    st.write("---")
-    st.markdown("### ⚙️ لوحة المطور (أدمن)")
-    admin_input_pass = st.text_input("أدخل الرقم السري للمطور فتح بنك الأسئلة:", type="password")
+    st.markdown("### ⚙️ لوحة المالك (أدمن)")
     
-    if admin_input_pass == "1234":
-        st.success("🔓 وضع المطور نشط")
-        tab_b1, tab_b2, tab_b3 = st.tabs(["أسئلة الأطفال", "أسئلة الكبار", "📝 سؤال يدوي"])
-        
-        with tab_b1:
-            kids_f_in = st.file_uploader("رفع إكسيل الأطفال:", type=["xlsx"], key="main_k")
-            if kids_f_in:
-                try:
-                    db["kids_q"] = pd.read_excel(kids_f_in).to_dict(orient='records')
-                    st.success(f"✅ اعتُمدت ({len(db['kids_q'])} سؤال)")
-                except: st.error("خطأ في بنية الملف.")
-        
-        with tab_b2:
-            adults_f_in = st.file_uploader("رفع إكسيل الكبار:", type=["xlsx"], key="main_a")
-            if adults_f_in:
-                try:
-                    db["adults_q"] = pd.read_excel(adults_f_in).to_dict(orient='records')
-                    st.success(f"✅ اعتُمدت ({len(db['adults_q'])} سؤال)")
-                except: st.error("خطأ في بنية الملف.")
-        
-        with tab_b3:
-            with st.form("main_manual_form"):
-                mt = st.text_input("نص السؤال اليدوي:")
-                o1 = st.text_input("الخيار 1 (الصحيح طرداً):")
-                o2 = st.text_input("الخيار 2:")
-                o3 = st.text_input("الخيار 3:")
-                o4 = st.text_input("الخيار 4:")
-                if st.form_submit_button("➕ حفظ وإدراج السؤال اليدوي"):
-                    if mt and o1:
-                        db["manual_q"].append({"السؤال": mt, "الخيار 1 - الصحيح": o1, "الخيار 2": o2, "الخيار 3": o3, "الخيار 4": o4})
-                        st.success("🎯 تم حفظ السؤال اليدوي ونشره بنجاح!")
-
-# الصفحة الرئيسية
-if st.session_state.curr_page == "home":
-    col_left_img, col_right_content = st.columns([1, 2])
-    with col_left_img: st.image("my_kids.png", use_container_width=True)
-    with col_right_content:
-        st.markdown("<h2 style='color: #4F46E5;'>منصة مسابقات هيا العائلية 🎯</h2>", unsafe_allow_html=True)
-        st.write("---")
-        col_m1, col_m2, col_m3 = st.columns(3)
-        with col_m1:
-            if st.button("🏆 أنشئ مسابقة الآن", use_container_width=True): st.session_state.curr_page = "admin_mode"; st.rerun()
-        with col_m2:
-            if st.button("🎮 انضم كمتسابق", use_container_width=True): st.session_state.curr_page = "player_mode"; st.rerun()
-        with col_m3:
-            if st.button("🕹️ ابدأ اللعب الفردي", use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
-
-# إدارة مسابقة حية (المدير)
-elif st.session_state.curr_page == "admin_mode":
-    st.markdown("<h2 style='text-align:center;'>👑 لوحة تحكم الموجه</h2>", unsafe_allow_html=True)
-    if st.button("↩️ العودة للرئيسية"): st.session_state.curr_page = "home"; st.rerun()
-    st.write("---")
-    
-    if 'my_live_room' not in st.session_state:
-        col_setup1, col_setup2 = st.columns(2)
-        with col_setup1:
-            q_src_v2 = st.radio("الفئة المستهدفة للعب:", ["أسئلة الأطفال", "أسئلة الكبار"])
-            num_limit_v2 = st.number_input("عدد أسئلة الجولة:", min_value=1, max_value=100, value=10)
-            max_players_v2 = st.number_input("عدد المتسابقين الحاضرين:", min_value=1, max_value=20, value=5)
-        with col_setup2:
-            timer_q_val = st.slider("الوقت المتاح لكل سؤال (بالثواني):", 5, 120, 12)
-            
-        if st.button("🎲 توليد الغرفة"):
-            pool_in = db["kids_q"] if "الأطفال" in q_src_v2 else db["adults_q"]
-            final_pool = db["manual_q"] + pool_in
-            
-            if not final_pool:
-                st.error("⚠️ بنك الأسئلة فارغ! يرجى رفع ملف إكسيل أو كتابة سؤال يدوي أولاً.")
+    if not st.session_state.admin_authenticated:
+        admin_pass = st.text_input("أدخل الرقم السري للمالك الخفي:", type="password")
+        if st.button("🔓 فتح لوحة التحكم"):
+            if admin_pass == "Abdulelah@2026":  # 🔒 تأمين حساب المالك برقم سري قوي
+                st.session_state.admin_authenticated = True
+                st.success("تم الدخول بنجاح!")
+                st.rerun()
             else:
-                if not st.session_state.generated_room_code:
-                    st.session_state.generated_room_code = str(random.randint(1000, 9999))
-                current_code = st.session_state.generated_room_code
-                st.session_state.my_live_room = current_code
+                st.error("❌ الرقم السري غير صحيح!")
+    else:
+        # زر تسجيل الخروج الثابت (🚪 لوق اوت)
+        if st.button("🚪 تسجيل الخروج من اللوحة"):
+            st.session_state.admin_authenticated = False
+            st.rerun()
+            
+        st.write("---")
+        # عرض عداد الزوار بشكل واضح مع التشارت (📊 عدّاد زوار الموقع)
+        st.metric(label="📊 عدد زوار الموقع الكلي", value=f"{db['total_visitors']} زائر")
+        if db["visitor_history"]:
+            df_v = pd.DataFrame(list(db["visitor_history"].items()), columns=["التاريخ", "الزيارات"])
+            st.line_chart(df_v.set_index("التاريخ"), height=130)
+            
+        st.write("---")
+        # رفع الأسئلة للأطفال وللكبار لتبقى في السيرفر دائماً للضيوف
+        st.markdown("📂 **تحميل وحفظ الأسئلة الدائمة**")
+        k_file = st.file_uploader("إكسيل الأطفال:", type=["xlsx"], key="side_k")
+        if k_file: 
+            db["kids_q"] = pd.read_excel(k_file).to_dict(orient='records')
+            st.success(f"✅ تم الحفظ بالسيرفر ({len(db['kids_q'])} سؤال)")
+        
+        a_file = st.file_uploader("إكسيل الكبار:", type=["xlsx"], key="side_a")
+        if a_file: 
+            db["adults_q"] = pd.read_excel(a_file).to_dict(orient='records')
+            st.success(f"✅ تم الحفظ بالسيرفر ({len(db['adults_q'])} سؤال)")
+        
+        st.write("---")
+        # كتابة سؤال يدوي وإدراجه في المسابقة الحية للمتسابقين
+        st.markdown("📝 **كتابة سؤال يدوي جديد**")
+        with st.form("side_manual_form", clear_on_submit=True):
+            mq = st.text_input("نص السؤال:")
+            o1 = st.text_input("الخيار 1 (الجواب الصحيح):")
+            o2 = st.text_input("الخيار 2:")
+            o3 = st.text_input("الخيار 3:")
+            o4 = st.text_input("الخيار 4:")
+            if st.form_submit_button("➕ حفظ وإدراج السؤال اليدوي"):
+                if mq and o1: 
+                    db["manual_q"].append({"السؤال": mq, "الخيار 1 - الصحيح": o1, "الخيار 2": o2, "الخيار 3": o3, "الخيار 4": o4})
+                    st.success("🎯 تم الحفظ وسيظهر بالجولة!")
                 
-                chosen_q = final_pool[:len(db["manual_q"])] + random.sample(pool_in, min(len(pool_in), max(1, int(num_limit_v2) - len(db["manual_q"]))))
-                
-                db["rooms"][current_code] = {
-                    "players": [], "max_players": max_players_v2, "status": "waiting", "current_q_idx": 0,
-                    "questions": chosen_q, "chat_history": [], "duration": timer_q_val, "scores": {},
-                    "q_start_time": time.time(), "answered_players": []
-                }
+        st.write("---")
+        # صندوق وارد الرسائل (تواصل معنا) يسار الصفحة
+        st.markdown("📬 **صندوق وارد الرسائل**")
+        if not db["messages"]: 
+            st.info("الصندوق فارغ حالياً.")
+        for msg in reversed(db["messages"]):
+            st.markdown(f"<div class='message-box'><strong>👤 {msg['name']}:</strong><br>{msg['msg']}</div>", unsafe_allow_html=True)
+
+# الصفحة الرئيسية للموقع
+if st.session_state.curr_page == "home":
+    st.markdown("<h2 style='text-align:center; color:#4F46E5;'>منصة مسابقات هيا العائلية 🎯</h2>", unsafe_allow_html=True)
+    col_l_img, col_r_btn = st.columns([1, 2])
+    with col_l_img:
+        st.image("my_kids.png", use_container_width=True) if os.path.exists("my_kids.png") else st.info("🎮 تحدي المسابقات العائلية")
+    with col_r_btn:
+        st.write("### جاهزون للتحدي والمنافسة الحية الحين؟")
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            if st.button("🏆 إنشاء وإدارة مسابقة حية", use_container_width=True): st.session_state.curr_page = "admin_mode"; st.rerun()
+        with col_b2:
+            if st.button("🎮 دخول كمتسابق للأبناء", use_container_width=True): st.session_state.curr_page = "player_mode"; st.rerun()
+        st.write("---")
+        col_b3, col_b4 = st.columns(2)
+        with col_b3:
+            if st.button("🕹️ تحدي اختبر نفسك الفردي", use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
+        with col_b4:
+            st.info("👥 طور المجموعات والفرق قيد التأسيس")
+
+# صفحة تواصل معنا (📬 ربطها بصندوق الوارد ليسار المالك)
+elif st.session_state.curr_page == "contact_mode":
+    st.markdown("### 📞 صفحة تواصل معنا")
+    with st.form("contact"):
+        c_name = st.text_input("اسمك الكريم:")
+        c_msg_txt = st.text_area("اكتب رسالتك لمالك التطبيق:")
+        if st.form_submit_button("📤 إرسال الرسالة الحين"):
+            if c_name and c_msg_txt: 
+                db["messages"].append({"name": c_name, "msg": c_msg_txt})
+                st.success("🎉 تم الإرسال بنجاح! وذهبت لصندوق وارد المالك على اليسار.")
+
+# إدارة مسابقة حية (المدير في المنتصف كما كان)
+elif st.session_state.curr_page == "admin_mode":
+    st.markdown("<h2 style='text-align:center;'>🏆 لوحة الموجه وإدارة المسابقات الحية</h2>", unsafe_allow_html=True)
+    if 'my_live_room' not in st.session_state:
+        q_src = st.radio("اختر الفئة للجولة المستهدفة:", ["أسئلة الأطفال", "أسئلة الكبار"])
+        num_q = st.number_input("عدد الأسئلة المطلوبة:", min_value=1, value=5)
+        t_val = st.slider("الوقت المتاح لكل سؤال (ثواني):", 5, 60, 12)
+        
+        if st.button("🎲 توليد غرفة المسابقة"):
+            pool = db["kids_q"] if "الأطفال" in q_src else db["adults_q"]
+            final_pool = db["manual_q"] + pool
+            if not final_pool: 
+                st.error("⚠️ بنك الأسئلة فارغ! يرجى تحميل ملف إكسيل أو كتابة سؤال يدوي من لوحة المالك يسار الصفحة أولاً.")
+            else:
+                if not st.session_state.generated_room_code: st.session_state.generated_room_code = str(random.randint(1000, 9999))
+                rcode = st.session_state.generated_room_code; st.session_state.my_live_room = rcode
+                chosen = final_pool[:len(db["manual_q"])] + random.sample(pool, min(len(pool), max(1, int(num_q) - len(db["manual_q"]))))
+                db["rooms"][rcode] = {"players": [], "status": "waiting", "current_q_idx": 0, "questions": chosen, "chat_history": [], "duration": t_val, "scores": {}, "q_start_time": time.time(), "answered_players": []}
                 st.rerun()
     else:
-        l_room = st.session_state.my_live_room
-        r_data_in = db["rooms"].get(l_room)
-        if r_data_in:
-            st.success(f"🎲 رقم الغرفة الحية المعتمد للأبناء هو: **{l_room}**")
-            col_live, col_chat = st.columns([2, 1])
-            with col_live:
-                st.markdown("### 👥 المتسابقون المتصلون:")
-                if not r_data_in["players"]: st.warning("🔄 بانتظار دخول الأبناء...")
-                else:
-                    g_cols = st.columns(3)
-                    for idi, pl_name in enumerate(r_data_in["players"]):
-                        has_ans = "✅ تمت الإجابة" if pl_name in r_data_in["answered_players"] else "⏳ يفكر..."
-                        g_cols[idi % 3].info(f"• {pl_name}: {has_ans}")
+        rid = st.session_state.my_live_room; rdata = db["rooms"].get(rid)
+        if rdata:
+            st.success(f"🎲 رقم الغرفة المعتمد للأبناء للدخول هو: **{rid}**")
+            col_l, col_r = st.columns([2, 1])
+            with col_l:
+                st.markdown("#### 👥 حالة إجابات المتسابقين الحالية:")
+                for pl in rdata["players"]:
+                    st.write(f"- **{pl}**: {'✅ تمت الإجابة الكفو' if pl in rdata['answered_players'] else '⏳ يفكر ويحسب الحل...'}")
                 st.write("---")
                 
-                if r_data_in["status"] == "waiting":
-                    if st.button("🚀 بدء المسابقة"):
-                        db["rooms"][l_room]["status"] = "playing"
-                        db["rooms"][l_room]["q_start_time"] = time.time()
-                        db["rooms"][l_room]["answered_players"] = []
-                        st.rerun()
-                elif r_data_in["status"] == "playing":
-                    qi = r_data_in["current_q_idx"]
-                    q_list_in = r_data_in["questions"]
-                    if qi < len(q_list_in):
-                        st.info(f"📊 السؤال الحالي ({qi + 1}/{len(q_list_in)}):")
-                        st.markdown(f"### **{q_list_in[qi]['السؤال']}**")
-                        
-                        correct_ans_str = str(q_list_in[qi].get("الخيار 1 - الصحيح", ""))
-                        st.success(f"💡 الإجابة الصحيحة في الإكسيل هي: **{correct_ans_str}**")
-                        
-                        elapsed = time.time() - r_data_in["q_start_time"]
-                        remaining = max(0, int(r_data_in["duration"] - elapsed))
-                        st.warning(f"⏱️ العداد التنازلي المزامَن: {remaining} ثانية متبقية.")
-                        
-                        if remaining <= 0:
-                            db["rooms"][l_room]["current_q_idx"] += 1
-                            db["rooms"][l_room]["q_start_time"] = time.time()
-                            db["rooms"][l_room]["answered_players"] = []
-                            st.rerun()
-                        
-                        if st.button("➡️ السؤال التالي يدوياً"):
-                            db["rooms"][l_room]["current_q_idx"] += 1
-                            db["rooms"][l_room]["q_start_time"] = time.time()
-                            db["rooms"][l_room]["answered_players"] = []
-                            st.rerun()
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        db["rooms"][l_room]["status"] = "finished"
-                        st.rerun()
-                        
-                elif r_data_in["status"] == "finished":
-                    st.markdown("<div class='leaderboard-box'>🏆 لوحة صدارة الأبطال النهائية 🏆</div>", unsafe_allow_html=True)
-                    sorted_scores = sorted(r_data_in["scores"].items(), key=lambda x: x[1], reverse=True)
-                    
-                    df_chart = pd.DataFrame(sorted_scores, columns=["المتسابق", "النقاط"])
-                    st.bar_chart(data=df_chart, x="المتسابق", y="النقاط", color="#4F46E5")
-                    
-                    for rank, (player, score) in enumerate(sorted_scores):
-                        medal = "🥇" if rank == 0 else "🥈" if rank == 1 else "🥉" if rank == 2 else "🎖️"
-                        st.write(f"### {medal} المركز {rank+1}: **{player}** حصد **{score}** نقطة!")
-                
-                if st.button("🛑 إنهاء وتدمير الغرفة"):
-                    if l_room in db["rooms"]: del db["rooms"][l_room]
-                    del st.session_state.my_live_room
-                    st.session_state.generated_room_code = None
-                    st.rerun()
-            with col_chat: show_live_chat(l_room, "المدير", is_admin=True)
-
-# نمط دخول كمتسابق
-elif st.session_state.curr_page == "player_mode":
-    st.header("🕹️ شاشة انضمام المتسابقين")
-    if st.button("↩️ العودة للرئيسية"):
-        if 'joined_live_room' in st.session_state:
-            old_r = st.session_state.joined_live_room; old_n = st.session_state.my_joined_name
-            if old_r in db["rooms"] and old_n in db["rooms"][old_r]["players"]: db["rooms"][old_r]["players"].remove(old_n)
-            del st.session_state.joined_live_room
-        st.session_state.curr_page = "home"; st.rerun()
-    st.write("---")
-    
-    if 'joined_live_room' not in st.session_state:
-        c_code = st.text_input("أدخل رقم الغرفة المكون من 4 أرقام:")
-        c_name = st.text_input("أدخل اسمك الكريم:")
-        if st.button("🚪 دخول الغرفة"):
-            if c_code in db["rooms"]:
-                robj = db["rooms"][c_code]
-                if len(robj["players"]) >= robj["max_players"]: st.error("الغرفة ممتلئة!")
-                elif c_name in robj["players"]: st.warning("الاسم مسجل بالفعل!")
-                else:
-                    db["rooms"][c_code]["players"].append(c_name)
-                    db["rooms"][c_code]["scores"][c_name] = 0
-                    st.session_state.joined_live_room = c_code
-                    st.session_state.my_joined_name = c_name
-                    st.success("🎉 متصل بالبث الحقيقي!")
-                    st.rerun()
-            else: st.error("الغرفة غير موجودة.")
-    else:
-        ar_p = st.session_state.joined_live_room; an_p = st.session_state.my_joined_name
-        if ar_p in db["rooms"]:
-            r_in = db["rooms"][ar_p]
-            col_pg, col_pc = st.columns([2, 1])
-            with col_pg:
-                if r_in["status"] == "waiting": st.info(f"👋 أهلاً {an_p}! انتظر إطلاق المسابقة من الموجه...")
-                elif r_in["status"] == "playing":
-                    qi = r_in["current_q_idx"]; ql = r_in["questions"]
+                if rdata["status"] == "waiting":
+                    if st.button("🚀 بدء المسابقة وإطلاق البث"): 
+                        db["rooms"][rid]["status"] = "playing"; db["rooms"][rid]["q_start_time"] = time.time(); db["rooms"][rid]["answered_players"] = []; st.rerun()
+                elif rdata["status"] == "playing":
+                    qi = rdata["current_q_idx"]; ql = rdata["questions"]
                     if qi < len(ql):
-                        st.markdown(f"### ❓ السؤال {qi + 1}")
-                        st.markdown(f"<h2>{ql[qi]['السؤال']}</h2>", unsafe_allow_html=True)
+                        st.write(f"📊 السؤال الحالي ({qi+1}/{len(ql)}): **{ql[qi]['السؤال']}**")
+                        c_ans = str(ql[qi].get("الخيار 1 - الصحيح", ""))
+                        st.success(f"💡 الجواب الصحيح بالإكسيل هو: **{c_ans}**")
                         
-                        correct_ans = str(ql[qi].get("الخيار 1 - الصحيح", ""))
+                        rem = max(0, int(rdata["duration"] - (time.time() - rdata["q_start_time"])))
+                        st.warning(f"⏱️ العداد التنازلي المتزامن: {rem} ثانية متبقية.")
                         
-                        if f"shuffled_opts_{qi}" not in st.session_state:
-                            raw_opts = [correct_ans, str(ql[qi].get("الخيار 2", "")), str(ql[qi].get("الخيار 3", "")), str(ql[qi].get("الخيار 4", ""))]
-                            random.shuffle(raw_opts)
-                            st.session_state[f"shuffled_opts_{qi}"] = raw_opts
+                        # الانتقال التلقائي والديركت للسؤال التالي فور انتهاء الوقت
+                        if rem <= 0:
+                            db["rooms"][rid]["current_q_idx"] += 1; db["rooms"][rid]["q_start_time"] = time.time(); db["rooms"][rid]["answered_players"] = []; st.rerun()
+                        if st.button("➡️ السؤال التالي يدوياً"):
+                            db["rooms"][rid]["current_q_idx"] += 1; db["rooms"][rid]["q_start_time"] = time.time(); db["rooms"][rid]["answered_players"] = []; st.rerun()
+                        time.sleep(1); st.rerun()
+                    else: 
+                        db["rooms"][rid]["status"] = "finished"; st.rerun()
+                elif rdata["status"] == "finished":
+                    st.markdown("<div class='leaderboard-box'>🏆 لوحة الصدارة النهائية والداشبورد 🏆</div>", unsafe_allow_html=True)
+                    sorted_sc = sorted(rdata["scores"].items(), key=lambda x: x[1], reverse=True)
+                    
+                    # عرض تشارت ورسم بياني مرضي وفخم للترتيب
+                    df_chart = pd.DataFrame(sorted_sc, columns=["المتسابق", "النقاط"])
+                    st.bar_chart(df_chart, x="المتسابق", y="النقاط")
+                    for rank, (p, s) in enumerate(sorted_sc):
+                        st.write(f"### 🏅 المركز {rank+1}: **{p}** حصد {s} نقطة كاملة!")
                         
-                        opts = st.session_state[f"shuffled_opts_{qi}"]
-                        sel = st.radio("اختر إجابتك الصحيحة الحين:", opts, key=f"p_opt_{qi}")
-                        
-                        elapsed = time.time() - r_in["q_start_time"]
-                        remaining = max(0, int(r_in["duration"] - elapsed))
-                        st.warning(f"⏳ متبقي عندك للتفكير: {remaining} ثانية!")
-                        
-                        if remaining <= 0:
-                            st.error(f"❌ انتهى الوقت المخصص! لقد أخطأت في الحل لعدم الإجابة بالوقت المحدد.")
-                            st.info(f"💡 معلومة لتثقيفك: الإجابة الصحيحة هي **{correct_ans}**")
-                            time.sleep(2)
-                            st.rerun()
-                        
-                        if st.button("✔️ اعتماد الإجابة"):
-                            if an_p not in db["rooms"][ar_p]["answered_players"]:
-                                db["rooms"][ar_p]["answered_players"].append(an_p)
-                            if sel == correct_ans:
-                                db["rooms"][ar_p]["scores"][an_p] += 10
-                                st.balloons(); st.success("صح! كفو يا بطل 🥳")
-                            else: 
-                                st.error(f"💔 إجابة خاطئة للتحدي!")
-                                st.info(f"💡 معلومة لتثقيفك: الإجابة الصحيحة هي **{correct_ans}**")
-                        time.sleep(1)
-                        st.rerun()
-                    else: st.success("🏁 انتهت الأسئلة!")
-                elif r_in["status"] == "finished":
-                    st.markdown("<div class='leaderboard-box'>🏆 النتيجة الختامية للأبطال 🏆</div>", unsafe_allow_html=True)
-                    sorted_p_scores = sorted(r_in["scores"].items(), key=lambda x: x[1], reverse=True)
-                    for rank, (player, score) in enumerate(sorted_p_scores):
-                        st.write(f"### المركز {rank+1} البطل {player}: حصد {score} نقطة!")
-                if st.button("🚪 مغادرة الغرفة"):
-                    if an_p in db["rooms"][ar_p]["players"]: db["rooms"][ar_p]["players"].remove(an_p)
-                    del st.session_state.joined_live_room; st.rerun()
-            with col_pc: show_live_chat(ar_p, an_p, is_admin=False)
-        else:
-            st.warning("🛑 تم إغلاق الغرفة.")
-            if st.button("العودة الرئيسية"): del st.session_state.joined_live_room; st.rerun()
+                if st.button("🛑 تدمير وإنهاء الغرفة"):
+                    if rid in db["rooms"]: del db["rooms"][rid]
+                    del st.session_state.my_live_room; st.session_state.generated_room_code = None; st.rerun()
+            with col_r: show_live_chat(rid, "المدير", is_admin=True)
 
-# نمط التسابق الفردي
+# دخول كمتسابق (الأبناء)
+elif st.session_state.curr_page == "player_mode":
+    st.header("🕹️ شاشة انضمام المتسابقين الأبطال")
+    if 'joined_live_room' not in st.session_state:
+        cc = st.text_input("أدخل رقم الغرفة (4 أرقام):")
+        cn = st.text_input("أدخل اسمك الكريم:")
+        if st.button("🚪 دخول الغرفة الآن"):
+            if cc in db["rooms"]: 
+                db["rooms"][cc]["players"].append(cn); db["rooms"][cc]["scores"][cn] = 0
+                st.session_state.joined_live_room = cc; st.session_state.my_joined_name = cn; st.rerun()
+            else: 
+                st.error("الغرفة غير موجودة أو تم إغلاقها من الموجه.")
+    else:
+        rid = st.session_state.joined_live_room; pname = st.session_state.my_joined_name; rdata = db["rooms"].get(rid)
+        if rdata:
+            col_l, col_r = st.columns([2, 1])
+            with col_l:
+                if rdata["status"] == "waiting": st.info("⏳ متصل بالبث الحقيقي! انتظر إطلاق التحدي من الموجه...")
+                elif rdata["status"] == "playing":
+                    qi = rdata["current_q_idx"]; ql = rdata["questions"]
+                    if qi < len(ql):
+                        st.write(f"### ❓ السؤال {qi+1}: {ql[qi]['السؤال']}")
+                        c_ans = str(ql[qi].get("الخيار 1 - الصحيح", ""))
+                        if f"sh_opts_{qi}" not in st.session_state:
+                            opts = [c_ans, str(ql[qi].get("الخيار 2", "")), str(ql[qi].get("الخيار 3", "")), str(ql[qi].get("الخيار 4", ""))]
+                            random.shuffle(opts); st.session_state[f"sh_opts_{qi}"] = opts
+                        sel = st.radio("اختر الجواب الصحيح الحين:", st.session_state[f"sh_opts_{qi}"], key=f"p_s_{qi}")
+                        
+                        rem = max(0, int(rdata["duration"] - (time.time() - rdata["q_start_time"])))
+                        st.warning(f"⏳ متبقي عندك للتفكير: {rem} ثانية!")
+                        
+                        # إشعار الخطأ التلقائي وتثقيف الطفل فور انتهاء الوقت
+                        if rem <= 0:
+                            st.error("❌ انتهى الوقت المخصص للحل! لقد أخطأت في حل هذا السؤال.")
+                            st.info(f"💡 المعلومة الصحيحة لتثقيفك هي: **{c_ans}**")
+                            time.sleep(3); st.rerun()
+                        if st.button("✔️ اعتماد الإجابة"):
+                            if pname not in db["rooms"][rid]["answered_players"]: db["rooms"][rid]["answered_players"].append(pname)
+                            if sel == c_ans: 
+                                st.balloons(); st.success("صح بطل كفو! 🥳"); db["rooms"][rid]["scores"][pname] += 10
+                            else: 
+                                st.error("❌ للأسف إجابة خاطئة ركز في القادم!"); st.info(f"💡 معلومة لتثقيفك: الصح هو **{c_ans}**")
+                        time.sleep(1); st.rerun()
+                    else: st.success("🏁 انتهت الأسئلة بانتظار عرض لوحة الصدارة النهائية...")
+                elif rdata["status"] == "finished":
+                    st.markdown("<div class='leaderboard-box'>🏆 النتيجة الختامية للأبطال 🏆</div>", unsafe_allow_html=True)
+                    for k, v in sorted(rdata["scores"].items(), key=lambda x: x[1], reverse=True): 
+                        st.write(f"### 🎉 البطل {k}: حصد **{v}** نقطة كاملة!")
+            with col_r: show_live_chat(rid, pname, is_admin=False)
+
+# نمط اختبر نفسك الفردي (🧠 دي اكتيفيت وتأمين مدمج)
 elif st.session_state.curr_page == "culture_mode":
-    st.markdown("### 🧠 نمط اكتشف ثقافتك (اختبر نفسك)")
-    if st.button("↩️ العودة للرئيسية"): st.session_state.curr_page = "home"; st.rerun()
-    st.write("---")
+    st.markdown("### 🧠 نمط اختبر نفسك الفردي وثقف ذاتك")
+    if st.button("↩️ العودة للرئيسية"): 
+        st.session_state.individual_challenge = {"status": "idle", "current_q": 0, "correct_ans": 0, "q_list": []}
+        st.session_state.curr_page = "home"; st.rerun()
+        
     c_status = st.session_state.individual_challenge["status"]
     if c_status == "idle":
-        if st.button("✨ ابدأ تحدي اختبر نفسك"):
-            pool = db["adults_q"] if db["adults_q"] else db["kids_q"]
-            if not pool: st.error("⚠️ يرجى رفع ملف أسئلة أولاً.")
-            else:
-                st.session_state.individual_challenge["q_list"] = random.sample(pool, min(len(pool), 15))
+        q_choice = st.radio("اختر القسم الثقافي المتاح:", ["قسم الأطفال 👶", "قسم الكبار 🧔 (غير مفعل الحين)"])
+        # 🧠 تعطيل قسم الكبار (Deactivate) تلقائياً ومنع خلطه مع أسئلة الأطفال
+        if "الكبار" in q_choice and not db["adults_q"]: 
+            st.error("⚠️ هذا القسم معطل حالياً (Deactivated) لعدم رفع ملف أسئلة الكبار من لوحة المالك على اليسار.")
+        else:
+            if st.button("✨ ابدأ التحدي الفردي الحين"):
+                pool = db["kids_q"] if "الأطفال" in q_choice else db["adults_q"]
+                st.session_state.individual_challenge["q_list"] = random.sample(pool, min(len(pool), 10))
                 st.session_state.individual_challenge["status"] = "playing"; st.session_state.individual_challenge["current_q"] = 0; st.session_state.individual_challenge["correct_ans"] = 0; st.rerun()
     elif c_status == "playing":
         qc = st.session_state.individual_challenge["current_q"]; qlc = st.session_state.individual_challenge["q_list"]
         if qc < len(qlc):
-            st.markdown(f"### ❓ السؤال {qc + 1} من {len(qlc)}")
-            st.markdown(f"## {qlc[qc]['السؤال']}")
+            st.write(f"❓ السؤال ({qc+1}/{len(qlc)}): **{qlc[qc]['السؤال']}**")
             c_ans = str(qlc[qc].get("الخيار 1 - الصحيح", ""))
             opts = [c_ans, str(qlc[qc].get("الخيار 2", "")), str(qlc[qc].get("الخيار 3", "")), str(qlc[qc].get("الخيار 4", ""))]
-            sel = st.radio("اختر الجواب:", opts, key=f"c_q_{qc}")
-            if st.button("✔️ اعتماد"):
-                if sel == c_ans: st.session_state.individual_challenge["correct_ans"] += 1; st.success("صح ✅")
-                else: st.error(f"خطأ ❌ الصح: {c_ans}")
-                st.session_state.individual_challenge["current_q"] += 1
-                if st.session_state.individual_challenge["current_q"] >= len(qlc): st.session_state.individual_challenge["status"] = "finished"
-                st.rerun()
+            sel = st.radio("الخيارات المتاحة:", opts, key=f"s_q_{qc}")
+            if st.button("✔️ اعتماد الجواب"):
+                if sel == c_ans: 
+                    st.session_state.individual_challenge["correct_ans"] += 1; st.success("صح كفو! ✅")
+                else: 
+                    st.error(f"خطأ! ❌ الصح هو: {c_ans}")
+                st.session_state.individual_challenge["current_q"] += 1; st.rerun()
+        else: 
+            st.session_state.individual_challenge["status"] = "finished"; st.rerun()
     elif c_status == "finished":
-        vans = st.session_state.individual_challenge["correct_ans"]
-        st.markdown("## 🏆 النتيجة النهائية")
-        st.write(f"لقد أجبت على **{vans}** من **15**.")
-        if vans >= 13: st.success("🥇 تصنيفك: عالي المستوى")
-        else: st.error("📉 حاول مرة أخرى!")
-        if st.button("إعادة التحدي"): st.session_state.individual_challenge = {"status": "idle", "current_q": 0, "correct_ans": 0, "q_list": []}; st.rerun()
+        st.success(f"🏆 النتيجة النهائية: لقد أجبت بشكل صحيح على {st.session_state.individual_challenge['correct_ans']} من أصل {len(st.session_state.individual_challenge['q_list'])} سؤال!")
 
-# صفحة تواصل معنا
-elif st.session_state.curr_page == "contact_mode":
-    st.markdown("### 📞 تواصل معنا")
-    if st.button("↩️ العودة للرئيسية"): st.session_state.curr_page = "home"; st.rerun()
-    st.write("---")
-    with st.form("contact"):
-        st.text_input("الاسم:")
-        st.text_area("الرسالة:")
-        if st.form_submit_button("📤 إرسال"): st.success("تم الإرسال بنجاح!")
+# 5. تذييل الحقوق والتوقيع الثابت بالعربي والإنجليزي (✍️ توقيع أسفل الصفحة)
+st.markdown("<div class='footer-text'>تطوير عبد الإله العنزي | Developed by Abdulelah Al-Anzi</div>", unsafe_allow_html=True)
