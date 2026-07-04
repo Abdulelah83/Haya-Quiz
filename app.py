@@ -4,7 +4,7 @@ import time
 import random
 from datetime import datetime
 
-# 1. إعدادات الصفحة والهوية البصرية
+# 1. إعدادات الصفحة والهوية البصرية الفخمة
 st.set_page_config(
     page_title="منصة هيا للمسابقات الاحترافية | Haya-Quiz Pro", 
     page_icon="🎮", 
@@ -28,7 +28,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. إنشاء مخزن بيانات مشترك وعام على السيرفر يراه الجميع تلقائياً
+# 2. إنشاء مخزن بيانات مشترك وعام على السيرفر
 if 'global_rooms_v2' not in st.session_state: st.session_state.global_rooms_v2 = {}
 if 'global_kids_q' not in st.session_state: st.session_state.global_kids_q = []
 if 'global_adults_q' not in st.session_state: st.session_state.global_adults_q = []
@@ -40,6 +40,7 @@ if 'individual_challenge' not in st.session_state:
     }
 
 if 'curr_page' not in st.session_state: st.session_state.curr_page = "home"
+if 'generated_room_code' not in st.session_state: st.session_state.generated_room_code = None
 
 @st.fragment
 def show_live_chat(room_id, user_name, is_admin):
@@ -56,11 +57,11 @@ def show_live_chat(room_id, user_name, is_admin):
                 <span class='msg-time'>{chat_msg['time']}</span>
             </div>
         """, unsafe_allow_html=True)
-    st.markdown("</div><br><br>", unsafe_allow_html=True)
+    st.markdown("</div><br>", unsafe_allow_html=True)
     
-    with st.form("chat_form_unique", clear_on_submit=True):
+    with st.form(f"chat_form_{room_id}", clear_on_submit=True):
         col_c1, col_c2 = st.columns([4, 1])
-        c_text = col_c1.text_input("اكتب رسالة فورية:", label_visibility="collapsed")
+        c_text = col_c1.text_input("اكتب رسالة فورية:", label_visibility="collapsed", key=f"input_{room_id}")
         if col_c2.form_submit_button("إرسال"):
             if c_text:
                 curr_t = datetime.now().strftime("%H:%M")
@@ -106,7 +107,6 @@ with st.sidebar:
             kids_f_in = st.file_uploader("Upload Children Excel", type=["xlsx"], key="main_k")
             if kids_f_in:
                 try:
-                    # حفظ في الذاكرة العامة ليتزامن عند الجميع فوراً
                     st.session_state.global_kids_q = pd.read_excel(kids_f_in).to_dict(orient='records')
                     st.success(f"✅ اعتُمدت ونُشرت للجميع ({len(st.session_state.global_kids_q)} سؤال)")
                 except: st.error("خطأ في الملف.")
@@ -144,7 +144,7 @@ if st.session_state.curr_page == "home":
         st.image("my_kids.png", use_container_width=True)
     with col_right_content:
         st.markdown("<h2 style='color: #4F46E5;'>منصة مسابقات هيا العائلية 🎯</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size:1.2rem;'>🔥 أهلاً بالأبطال الغاليين.. جاهزين للتحدي والمنافسة؟</p>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size:1.2rem;'>🔥 أهلاً بالأبطال الغاليين.. جاهزين للتحدي والمنافسة?</p>", unsafe_allow_html=True)
         st.write("---")
         
         col_m1, col_m2, col_m3 = st.columns(3)
@@ -175,7 +175,6 @@ elif st.session_state.curr_page == "admin_mode":
     if 'my_live_room' not in st.session_state:
         col_setup1, col_setup2 = st.columns(2)
         with col_setup1:
-            # تصحيح الراديو ليلتقط البيانات المشتركة المرفوعة تلقائياً
             q_src_v2 = st.radio("الفئة المستهدفة للعب:", ["أسئلة الأطفال", "أسئلة الكبار"])
             num_limit_v2 = st.number_input("عدد أسئلة الجولة:", min_value=1, max_value=100, value=10)
             max_players_v2 = st.number_input("عدد المتسابقين الحاضرين:", min_value=1, max_value=20, value=5)
@@ -190,7 +189,11 @@ elif st.session_state.curr_page == "admin_mode":
             if not pool_in:
                 st.error("⚠️ بنك الأسئلة فارغ! يرجى رفع ملف إكسيل من القائمة الجانبية أولاً لتظهر للجميع.")
             else:
-                current_code = str(random.randint(1000, 9999))
+                # توليد وحفظ الكود بشكل ثابت لمنع تشوهه بالتحديث تلقائياً
+                if not st.session_state.generated_room_code:
+                    st.session_state.generated_room_code = str(random.randint(1000, 9999))
+                
+                current_code = st.session_state.generated_room_code
                 st.session_state.my_live_room = current_code
                 st.session_state.global_rooms_v2[current_code] = {
                     "players": [], "max_players": max_players_v2, "status": "waiting", "current_q_idx": 0,
@@ -219,8 +222,14 @@ elif st.session_state.curr_page == "admin_mode":
                     qi = r_data_in["current_q_idx"]
                     q_list_in = r_data_in["questions"]
                     if qi < len(q_list_in):
-                        st.info(f"📊 السؤال الحالي ({qi + 1}/{len(q_list_in)}):")
+                        st.info(f"📊 السؤال الحالي للمتسابقين ({qi + 1}/{len(q_list_in)}):")
                         st.markdown(f"### **{q_list_in[qi]['السؤال']}**")
+                        
+                        # إظهار الخيارات والإجابة الصحيحة للمدير لمتابعة الأبناء
+                        st.markdown("**📋 الخيارات المتاحة للمتسابقين:**")
+                        st.write(f"1. {q_list_in[qi].get('الخيار 1')} | 2. {q_list_in[qi].get('الخيار 2')} | 3. {q_list_in[qi].get('الخيار 3')} | 4. {q_list_in[qi].get('الخيار 4')}")
+                        st.success(f"💡 الإجابة الصحيحة خلف الكواليس هي: **{q_list_in[qi].get('الإجابة الصحيحة')}**")
+                        
                         if st.button("➡️ السؤال التالي"):
                             st.session_state.global_rooms_v2[l_room]["current_q_idx"] += 1
                             st.rerun()
@@ -229,7 +238,8 @@ elif st.session_state.curr_page == "admin_mode":
                         st.session_state.global_rooms_v2[l_room]["status"] = "finished"
                 if st.button("🛑 إنهاء المسابقة وتدمير الغرفة"):
                     if l_room in st.session_state.global_rooms_v2: del st.session_state.global_rooms_v2[l_room]
-                    del st.session_state.my_live_room
+                    if 'my_live_room' in st.session_state: del st.session_state.my_live_room
+                    st.session_state.generated_room_code = None
                     st.rerun()
             with col_chat:
                 st.markdown("### 💬 المحادثة")
@@ -257,13 +267,14 @@ elif st.session_state.curr_page == "player_mode":
             if c_code in st.session_state.global_rooms_v2:
                 robj = st.session_state.global_rooms_v2[c_code]
                 if len(robj["players"]) >= robj["max_players"]: st.error("الغرفة ممتلئة!")
+                elif c_name in robj["players"]: st.warning("الاسم مسجل بالفعل!")
                 else:
                     st.session_state.global_rooms_v2[c_code]["players"].append(c_name)
                     st.session_state.joined_live_room = c_code
                     st.session_state.my_joined_name = c_name
                     st.success("🎉 متصل بالبث الحقيقي!")
                     st.rerun()
-            else: st.error("الغرفة غير موجودة.")
+            else: st.error("الغرفة غير موجودة أو تم إغلاقها من المدير.")
     else:
         ar_p = st.session_state.joined_live_room
         an_p = st.session_state.my_joined_name
@@ -294,6 +305,11 @@ elif st.session_state.curr_page == "player_mode":
             with col_pc:
                 st.markdown("### 💬 شات المسابقة")
                 show_live_chat(ar_p, an_p, is_admin=False)
+        else:
+            st.warning("🛑 تم إغلاق الغرفة.")
+            if st.button("العودة الرئيسية"): 
+                if 'joined_live_room' in st.session_state: del st.session_state.joined_live_room
+                st.rerun()
 
 # نمط التسابق الفردي (اختبر نفسك)
 elif st.session_state.curr_page == "culture_mode":
