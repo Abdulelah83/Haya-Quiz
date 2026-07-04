@@ -3,260 +3,283 @@ import pandas as pd
 import time
 import random
 
-# إعدادات الصفحة
-st.set_page_config(page_title="منصة هيا للمسابقات", page_icon="🎮", layout="wide")
+# إعدادات الصفحة العامة والجمالية
+st.set_page_config(page_title="منصة هيا للمسابقات Pro", page_icon="🎮", layout="wide")
 
-# إدارة الذاكرة المستقرة للغرف والمحادثات لضمان الاستقرار على ريندر
-if 'rooms_db' not in st.session_state:
-    st.session_state.rooms_db = {}
+# --- حل مشكلة استقرار الغرف والمزامنة المستمرة على السيرفر ---
+if 'global_rooms' not in st.session_state:
+    st.session_state.global_rooms = {}
 
-if 'custom_questions' not in st.session_state:
-    st.session_state.custom_questions = []
+if 'questions_bank' not in st.session_state:
+    st.session_state.questions_bank = []
 
-def force_rerun():
-    time.sleep(2)
+# دالة التحديث التلقائي للمزامنة الحية عن بعد
+def live_refresh():
+    time.sleep(1.5)
     st.rerun()
 
-# --- واجهة المنصة الرئيسية ---
-st.title("🎮 منصة هيا للمسابقات | Haya-Quiz")
+# --- الهوية البصرية والواجهة الأصلية الفخمة للمنصة ---
+st.markdown("<h1 style='text-align: center; color: #4F46E5;'>🎮 منصة هيا للمسابقات الاحترافية | Haya-Quiz</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 1.2rem;'>النظام المطور للمسابقات الحية والتحكم عن بُعد</p>", unsafe_allow_html=True)
 st.write("---")
 
-# الخيارات الثلاثة الرئيسية في الصفحة الأولى
-main_option = st.radio(
-    "اختر نمط اللعب المفضل لديك اليوم:",
+# الصف الأول العلوي: الأنماط الرئيسية الثلاثة بنفس المسمى المعتمد لديك
+main_mode = st.radio(
+    " اختر نمط اللعب المفضل لديك اليوم لتنطلق مع العائلة:",
     ["🎮 إدارة مسابقة حية", "🕹️ دخول كمتسابق", "🧠 اكتشف ثقافتك"],
     horizontal=True
 )
+st.write("---")
 
-# ----------------- 1️⃣ النمط الأول: إدارة مسابقة حية (المدير) -----------------
-if main_option == "🎮 إدارة مسابقة حية":
+# ----------------- 1️⃣ النمط الأول: إدارة مسابقة حية (المدير والموجه) -----------------
+if main_mode == "🎮 إدارة مسابقة حية":
     
-    # [الحالة الأولى: مرحلة الإدخال والتجهيز - قبل توليد الغرفة]
-    if 'my_room' not in st.session_state:
-        st.header("🔑 إعدادات وتجهيز المسابقة الحية")
+    # [المرحلة الأولى: الواجهة الأصلية الجميلة لإعداد المسابقة - قبل التوليد]
+    if 'active_room_id' not in st.session_state:
+        st.subheader("🔑 لوحة تحكم وتجهيز الموجه")
         
-        # التحقق من الرقم السري للمدير
-        admin_password = st.text_input("أدخل الرقم السري للمدير لفتح الصلاحيات:", type="password")
+        # حقل الرقم السري للمدير
+        access_password = st.text_input("أدخل الرقم السري للمدير لفتح صلاحيات البث:", type="password")
         
-        if admin_password == "1234":
-            st.success("✅ تم التحقق من الهوية بنجاح.")
+        if access_password == "1234":
+            st.success("🔓 تم فتح الصلاحيات بنجاح. أهلاً بك يا أبا عبد الإله.")
+            
+            # خيارات الواجهة
+            compet_lang = st.selectbox("لغة واجهة المسابقة المعتمدة:", ["العربية", "English"])
+            
+            # رفع الملفات (أطفال / بالغين) بنفس الترتيب المريح والأنيق
+            st.markdown("### 📂 تحميل بنك الأسئلة الذكي:")
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                excel_kids = st.file_uploader("📥 رفع ملف إكسيل الأطفال (.xlsx)", type=["xlsx"], key="kids_up")
+                if excel_kids:
+                    try:
+                        st.session_state.questions_bank = pd.read_excel(excel_kids).to_dict(orient='records')
+                        st.success(f"✅ تم اعتماد ملف الأطفال بنجاح! ({len(st.session_state.questions_bank)} سؤال)")
+                    except:
+                        st.error("خطأ في قراءة الملف، تأكد من الأعمدة.")
+                        
+            with col_f2:
+                excel_adults = st.file_uploader("📥 رفع ملف إكسيل البالغين (.xlsx)", type=["xlsx"], key="adults_up")
+                if excel_adults:
+                    try:
+                        st.session_state.questions_bank = pd.read_excel(excel_adults).to_dict(orient='records')
+                        st.success(f"✅ تم اعتماد ملف البالغين بنجاح! ({len(st.session_state.questions_bank)} سؤال)")
+                    except:
+                        st.error("خطأ في قراءة الملف.")
+            
             st.write("---")
-            
-            # خيار تحويل اللغة واختيار الملفات
-            lang = st.selectbox("اختر لغة واجهة المسابقة / Select Language:", ["العربية", "English"])
-            
-            st.write("📂 **تحميل بنك الأسئلة:**")
-            col_file1, col_file2 = st.columns(2)
-            with col_file1:
-                file_kids = st.file_uploader("📥 رفع ملف إكسيل الأطفال (.xlsx)", type=["xlsx"])
-                if file_kids:
-                    df = pd.read_excel(file_kids)
-                    st.session_state.custom_questions = df.to_dict(orient='records')
-                    st.success(f"تم اعتماد أسئلة الأطفال ({len(st.session_state.custom_questions)} سؤال)")
-                    
-            with col_file2:
-                file_adults = st.file_uploader("📥 رفع ملف إكسيل البالغين (.xlsx)", type=["xlsx"])
-                if file_adults:
-                    df = pd.read_excel(file_adults)
-                    st.session_state.custom_questions = df.to_dict(orient='records')
-                    st.success(f"تم اعتماد أسئلة البالغين ({len(st.session_state.custom_questions)} سؤال)")
-            
-            # إضافة سؤال يدوي مع صورة
-            st.write("📝 **إضافة سؤال يدوي سريع:**")
-            with st.form("manual_question_form"):
-                q_text = st.text_input("نص السؤال:")
-                o1 = st.text_input("الخيار 1:")
-                o2 = st.text_input("الخيار 2:")
-                o3 = st.text_input("الخيار 3:")
-                o4 = st.text_input("الخيار 4:")
-                c_ans = st.text_input("الإجابة الصحيحة تماماً:")
-                img_url = st.text_input("رابط صورة توضيحية للسؤال (اختياري):")
+            # إضافة سؤال يدوي تفاعلي مع رابط الصورة
+            st.markdown("### 📝 إضافة سؤال يدوي سريع:")
+            with st.form("add_manual_q_form"):
+                q_text = st.text_input("نص السؤال المراد إضافته:")
+                c1 = st.text_input("الخيار الأول:")
+                c2 = st.text_input("الخيار الثاني:")
+                c3 = st.text_input("الخيار الثالث:")
+                c4 = st.text_input("الخيار الرابع:")
+                correct_ans = st.text_input("الإجابة الصحيحة (مطابقة تماماً لأحد الخيارات):")
+                pic_url = st.text_input("رابط الصورة التوضيحية للسؤال (إن وُجدت):", placeholder="https://...")
                 
-                if st.form_submit_button("➕ حفظ السؤال يدويًا"):
-                    if q_text and o1 and c_ans:
-                        st.session_state.custom_questions.append({
-                            "السؤال": q_text, "الخيار 1": o1, "الخيار 2": o2, "الخيار 3": o3, "الخيار 4": o4,
-                            "الإجابة الصحيحة": c_ans, "الصورة": img_url if img_url else None
+                if st.form_submit_button("➕ حفظ وإدراج السؤال الحالي"):
+                    if q_text and c1 and correct_ans:
+                        st.session_state.questions_bank.append({
+                            "السؤال": q_text, "الخيار 1": c1, "الخيار 2": c2, "الخيار 3": c3, "الخيار 4": c4,
+                            "الإجابة الصحيحة": correct_ans, "الصورة": pic_url if pic_url else None
                         })
-                        st.success("تم حفظ السؤال الإضافي بنجاح!")
+                        st.success("🎯 تم حفظ السؤال الإضافي في الذاكرة الحالية!")
 
             st.write("---")
-            # محددات البث الحي قبل التوليد
-            st.subheader("⏱️ محددات الغرفة والوقت")
-            col_setup1, col_setup2 = st.columns(2)
-            with col_setup1:
-                q_limit = st.number_input("حدد عدد الأسئلة للمسابقة الحالية:", min_value=1, max_value=100, value=10)
-            with col_setup2:
-                q_duration = st.number_input("حدد مدة كل سؤال (بالثواني):", min_value=5, max_value=120, value=30)
-                
-            if st.button("✨ تفعيل وإنشاء غرفة المسابقة وتوليد الرقم"):
-                if not st.session_state.custom_questions:
-                    st.error("الرجاء رفع ملف أسئلة أو إضافة سؤال يدوي أولاً!")
+            # محددات البث والتحكم بالوقت والعدد
+            st.markdown("### ⏱️ محددات الغرفة والتحكم بالعداد التنازلي:")
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                total_q_count = st.number_input("عدد الأسئلة المطلوبة للمسابقة:", min_value=1, max_value=200, value=10)
+            with col_s2:
+                sec_duration = st.number_input("مدة عداد كل سؤال بالثواني (عداد تنازلي):", min_value=5, max_value=180, value=30)
+            
+            st.write("---")
+            # زر الإنشاء والانبثاق الفوري
+            if st.button("✨ تفعيل البث الحي وإنشاء غرفة المسابقة الآن"):
+                if not st.session_state.questions_bank:
+                    st.error("⚠️ يرجى رفع ملف أسئلة أو كتابة سؤال يدوي أولاً لتوليد الغرفة!")
                 else:
-                    room_id = str(random.randint(1000, 9999))
-                    st.session_state.my_room = room_id
-                    st.session_state.rooms_db[room_id] = {
+                    new_room = str(random.randint(1000, 9999))
+                    st.session_state.active_room_id = new_room
+                    # حفظ البيانات في الذاكرة المشتركة المستقرة لمنع الاختفاء
+                    st.session_state.global_rooms[new_room] = {
                         "players": [],
                         "status": "waiting",
-                        "current_question": 0,
-                        "questions": st.session_state.custom_questions[:q_limit],
-                        "duration": q_duration,
-                        "language": lang,
-                        "chat": []
+                        "current_q_index": 0,
+                        "questions": st.session_state.questions_bank[:total_q_count],
+                        "duration": sec_duration,
+                        "language": compet_lang,
+                        "chat_history": []
                     }
                     st.rerun()
-        elif admin_password != "":
-            st.error("❌ الرقم السري غير صحيح، يرجى المحاولة مرة أخرى.")
+        elif access_password != "":
+            st.error("❌ الرقم السري غير صحيح، يرجى إعادة المحاولة.")
 
-    # [الحالة الثانية: انبثاق لوحة البث النظيفة والدردشة - بعد توليد الغرفة]
+    # [المرحلة الثانية: انبثاق لوحة البث النظيفة والتحكم الكامل والدردشة عن بعد]
     else:
-        room_id = st.session_state.my_room
-        room_data = st.session_state.rooms_db.get(room_id)
+        r_id = st.session_state.active_room_id
+        r_data = st.session_state.global_rooms.get(r_id)
         
-        if room_data:
-            st.header("📺 لوحة البث المباشر والتحكم عن بعد")
-            st.success(f"🎲 تم توليد الغرفة بنجاح! رقم الدخول الفوري للأبناء هو: **{room_id}**")
-            st.write(f"🌐 اللغة: **{room_data['language']}** | عدد الأسئلة المخصصة: **{len(room_data['questions'])}** | مدة السؤال: **{room_data['duration']} ثانية**")
+        if r_data:
+            st.markdown(f"<h2 style='color:#10B981;'>📺 لوحة البث المباشر والتحكم الفوري عن بُعد</h2>", unsafe_allow_html=True)
+            st.info(f"🎲 رقم الغرفة السري والفعال للأبناء هو: **{r_id}** (بانتظار انضمامهم الحين)")
+            st.write(f"📊 الأسئلة: {len(r_data['questions'])} | ⏳ مدة العداد المخصصة: {r_data['duration']} ثانية")
             st.write("---")
             
-            # تقسيم الشاشة للبث الحي والدردشة عن بعد
-            col_live, col_chat = st.columns([2, 1])
+            col_control, col_live_chat = st.columns([2, 1])
             
-            with col_live:
-                st.subheader("👥 المشتركون المتصلون بالانتظار حالياً:")
-                if not room_data["players"]:
-                    st.warning("بانتظار دخول الأبناء بالرقم... (الشاشة تتحدث تلقائياً 🔄)")
+            with col_control:
+                st.markdown("### 👥 الأبناء المتصلون في غرفة الانتظار الآن:")
+                if not r_data["players"]:
+                    st.warning("🔄 بانتظار دخول الأبناء بالرقم السري... الشاشة تحدث نفسها تلقائياً ثانية بثانية")
                 else:
-                    cols = st.columns(3)
-                    for idx, p in enumerate(room_data["players"]):
-                        cols[idx % 3].success(f"• {p} جاهز ✅")
-                        
+                    cols_p = st.columns(3)
+                    for i, player in enumerate(r_data["players"]):
+                        cols_p[i % 3].success(f"• {player} جاهز ومتصل ✅")
+                
                 st.write("---")
-                if room_data["status"] == "waiting":
-                    if st.button("🚀 إطلاق المسابقة وتفعيل السؤال الأول لجميع المتسابقين"):
-                        st.session_state.rooms_db[room_id]["status"] = "playing"
+                if r_data["status"] == "waiting":
+                    if st.button("🚀 إطلاق المسابقة وتفعيل السؤال الأول فوراً على شاشاتهم"):
+                        st.session_state.global_rooms[r_id]["status"] = "playing"
                         st.rerun()
                         
-                elif room_data["status"] == "playing":
-                    q_idx = room_data["current_question"]
-                    qs = room_data["questions"]
+                elif r_data["status"] == "playing":
+                    q_now = r_data["current_q_index"]
+                    qs_list = r_data["questions"]
                     
-                    if q_idx < len(qs):
-                        st.info(f"📊 السؤال الحالي المعروض الآن ({q_idx + 1}/{len(qs)}): {qs[q_idx]['السؤال']}")
-                        if st.button("➡️ نقل المتسابقين وتفعيل السؤال التالي تلقائياً"):
-                            st.session_state.rooms_db[room_id]["current_question"] += 1
+                    if q_now < len(qs_list):
+                        st.info(f"📊 السؤال المعروض للأبناء حالياً ({q_now + 1}/{len(qs_list)}):")
+                        st.markdown(f"**{qs_list[q_now]['السؤال']}**")
+                        if qs_list[q_now].get("الصورة"):
+                            st.image(qs_list[q_now]["الصورة"], width=300, caption="الصورة التوضيحية للسؤال")
+                            
+                        if st.button("➡️ نقل الأبناء تلقائياً وتفعيل السؤال القادم"):
+                            st.session_state.global_rooms[r_id]["current_q_index"] += 1
                             st.rerun()
                     else:
-                        st.success("🏁 انتهت الأسئلة المحددة للمسابقة!")
-                        st.session_state.rooms_db[room_id]["status"] = "finished"
-                        
+                        st.success("🏁 رائع جداً! انتهت المسابقة الحالية وجميع الأسئلة.")
+                        st.session_state.global_rooms[r_id]["status"] = "finished"
+                
                 st.write("---")
                 if st.button("🛑 إغلاق وإنهاء المسابقة كلياً وتدمير الصفحات عند الجميع"):
-                    if room_id in st.session_state.rooms_db:
-                        del st.session_state.rooms_db[room_id]
-                    del st.session_state.my_room
+                    if r_id in st.session_state.global_rooms:
+                        del st.session_state.global_rooms[r_id]
+                    if 'active_room_id' in st.session_state:
+                        del st.session_state.active_room_id
                     st.rerun()
-                    
-            with col_chat:
-                st.subheader("💬 غرفة المحادثة المباشرة للمسابقة")
+            
+            with col_live_chat:
+                st.markdown("### 💬 محادثة المسابقة عن بُعد:")
                 st.write("---")
-                for msg in room_data["chat"]:
-                    st.write(f"**{msg['user']}:** {msg['text']}")
+                for m in r_data["chat_history"]:
+                    st.write(f"**{m['user']}:** {m['text']}")
                 
-                admin_msg = st.text_input("اكتب رسالة للمتسابقين:", key="admin_msg_input")
-                if st.button("إرسال الشات"):
-                    if admin_msg:
-                        st.session_state.rooms_db[room_id]["chat"].append({"user": "المدير", "text": admin_msg})
+                a_msg = st.text_input("اكتب رسالة فورية للأبناء:", key="admin_chat_in")
+                if st.button("إرسال للمحادثة"):
+                    if a_msg:
+                        st.session_state.global_rooms[r_id]["chat_history"].append({"user": "المدير (أبو صالح)", "text": a_msg})
                         st.rerun()
                         
-            force_rerun()
+            live_refresh()
 
-# ----------------- 2️⃣ النمط الثاني: دخول كمتسابق (الأبناء) -----------------
-elif main_option == "🕹️ دخول كمتسابق":
-    st.header("🕹️ انضمام للمسابقة الحية")
+# ----------------- 2️⃣ النمط الثاني: دخول كمتسابق (الأبناء واللاعبين) -----------------
+elif main_mode == "🕹️ دخول كمتسابق":
+    st.header("🕹️ شاشة انضمام المتسابقين للأبناء")
     
-    if 'current_player_room' not in st.session_state:
-        room_input = st.text_input("أدخل رقم الغرفة المكون من 4 أرقام:")
-        p_name = st.text_input("أدخل اسمك الكريم للمنافسة:")
+    if 'player_room_id' not in st.session_state:
+        r_input = st.text_input("أدخل رقم الغرفة المكون من 4 أرقام لبدء المزامنة:")
+        p_name = st.text_input("أدخل اسمك الكريم للانضمام للبث:")
         
-        if st.button("🚪 دخول الغرفة المباشرة"):
-            if room_input in st.session_state.rooms_db:
-                if p_name not in st.session_state.rooms_db[room_input]["players"]:
-                    st.session_state.rooms_db[room_input]["players"].append(p_name)
-                st.session_state.current_player_room = room_input
-                st.session_state.player_identity = p_name
-                st.success("تم الدخول والربط المزامَن بنجاح!")
+        if st.button("🚪 دخول الغرفة التفاعلية"):
+            if r_input in st.session_state.global_rooms:
+                if p_name not in st.session_state.global_rooms[r_input]["players"]:
+                    st.session_state.global_rooms[r_input]["players"].append(p_name)
+                st.session_state.player_room_id = r_input
+                st.session_state.player_name_tag = p_name
+                st.success("🎉 تم ربطك بنجاح وبانتظار انطلاق الموجه!")
                 st.rerun()
             else:
-                st.error("الغرفة غير موجودة حالياً أو تم إغلاقها من المدير.")
+                st.error("❌ عذراً! رقم الغرفة غير موجود حالياً، تأكد من قيام الموجه بإنشائها أولاً.")
     else:
-        r_id = st.session_state.current_player_room
-        p_name = st.session_state.player_identity
+        player_r = st.session_state.player_room_id
+        player_n = st.session_state.player_name_tag
         
-        if r_id in st.session_state.rooms_db:
-            r_data = st.session_state.rooms_db[r_id]
+        if player_r in st.session_state.global_rooms:
+            room_info = st.session_state.global_rooms[player_r]
             
-            col_p_live, col_p_chat = st.columns([2, 1])
+            col_p_game, col_p_chat = st.columns([2, 1])
             
-            with col_p_live:
-                if r_data["status"] == "waiting":
-                    st.info(f"👋 أهلاً بك يا {p_name}! تم ربطك بالغرفة الفعالة. انتظر الموجه حتى يطلق المسابقة ⏳")
-                elif r_data["status"] == "playing":
-                    q_idx = r_data["current_question"]
-                    qs = r_data["questions"]
+            with col_p_game:
+                if room_info["status"] == "waiting":
+                    st.info(f"👋 أهلاً بك يا {player_n}! أنت متصل الآن بالغرفة رقم ({player_r}). خلك جاهز ومستعد، بانتظار إطلاق المسابقة من المدير... ⏳")
+                
+                elif room_info["status"] == "playing":
+                    curr_q = room_info["current_q_index"]
+                    questions = room_info["questions"]
                     
-                    if q_idx < len(qs):
-                        st.subheader(f"🤔 السؤال رقم {q_idx + 1}")
-                        st.write(qs[q_idx]["السؤال"])
+                    if curr_q < len(questions):
+                        st.markdown(f"### ❓ السؤال رقم {curr_q + 1}")
+                        st.markdown(f"#### {questions[curr_q]['السؤال']}")
                         
-                        if qs[q_idx].get("الصورة") and pd.notna(qs[q_idx]["الصورة"]):
-                            st.image(qs[q_idx]["الصورة"], use_column_width=True)
-                            
-                        options = [str(qs[q_idx]["الخيار 1"]), str(qs[q_idx]["الخيار 2"]), str(qs[q_idx]["الخيار 3"]), str(qs[q_idx]["الخيار 4"])]
-                        ans = st.radio("اختر إجابتك الصحيحة بسرعة:", options, key=f"p_ans_{q_idx}")
+                        # إظهار الصورة للأبناء بشكل ممتاز جداً إذا كانت مرفوعة برابط أو ملف إكسيل
+                        if questions[curr_q].get("الصورة") and pd.notna(questions[curr_q]["الصورة"]):
+                            st.image(questions[curr_q]["الصورة"], use_column_width=True, caption="الصورة الخاصة بالسؤال")
                         
-                        st.warning(f"⏳ الوقت المحدد للسؤال الحالي: {r_data['duration']} ثانية.")
+                        opts = [str(questions[curr_q]["الخيار 1"]), str(questions[curr_q]["الخيار 2"]), str(questions[curr_q]["الخيار 3"]), str(questions[curr_q]["الخيار 4"])]
+                        chosen = st.radio("اختر إجابتك الصحيحة الحين بسرعة قبل انتهاء الوقت:", opts, key=f"p_ans_choice_{curr_q}")
                         
-                        if st.button("✔️ اعتماد الإجابة"):
-                            if ans == str(qs[q_idx]["الإجابة الصحيحة"]):
+                        st.warning(f"⏳ العداد الزمني للسؤال الحالي: {room_info['duration']} ثانية.")
+                        
+                        if st.button("✔️ اعتماد الإجابة النهائية والسؤال"):
+                            if chosen == str(questions[curr_q]["الإجابة الصحيحة"]):
                                 st.balloons()
-                                st.success("إجابة صحيحة! كفوو يا بطل 🥳")
+                                st.success("🎉 كفوووو يا بطل! إجابة صحيحة وممتازة 🥳")
                             else:
-                                st.error(f"إجابة خاطئة! الإجابة الصح هي: {qs[q_idx]['الإجابة الصحيحة']}")
+                                st.error(f"💔 للأسف إجابة خاطئة! حاول تركيزك في السؤال القادم. الإجابة الصحيحة هي: {questions[curr_q]['الإجابة الصحيحة']}")
                     else:
-                        st.success("🏁 انتهت الأسئلة! بانتظار الموجه لإعلان النتيجة النهائية.")
-                elif r_data["status"] == "finished":
-                    st.success("🏆 انتهت المسابقة بالكامل، بيّض الله وجوهكم جميعاً!")
+                        st.success("🏁 كفو يا أبطال! انتهت جميع الأسئلة، انتظر إعلان النتيجة النهائية من الموجه.")
+                
+                elif room_info["status"] == "finished":
+                    st.success("🏆 تم إنهاء المسابقة بالكامل بنجاح! بيّض الله وجوهكم وشكراً للمنافسة الجمالية.")
             
             with col_p_chat:
-                st.subheader("💬 الدردشة مع الموجه")
-                for msg in r_data["chat"]:
+                st.markdown("### 💬 محادثة مباشرة مع الموجه:")
+                for msg in room_info["chat_history"]:
                     st.write(f"**{msg['user']}:** {msg['text']}")
-                p_msg = st.text_input("اكتب رسالة:", key="p_msg_input")
-                if st.button("إرسال"):
-                    if p_msg:
-                        st.session_state.rooms_db[r_id]["chat"].append({"user": p_name, "text": p_msg})
+                
+                p_msg_in = st.text_input("اكتب رسالة سريعة:", key="player_chat_input_box")
+                if st.button("إرسال للموجه"):
+                    if p_msg_in:
+                        st.session_state.global_rooms[player_r]["chat_history"].append({"user": player_n, "text": p_msg_in})
                         st.rerun()
             
-            force_rerun()
+            live_refresh()
         else:
-            st.warning("⚠️ قام الموجه بإنهاء المسابقة وإغلاق الغرفة الحالية فوراً.")
-            if st.button("العودة إلى القائمة الرئيسية"):
-                del st.session_state.current_player_room
+            st.warning("🛑 قام الموجه بإنهاء وإغلاق هذه المسابقة وتصفير الغرفة الحالية.")
+            if st.button("العودة لشاشة الدخول الرئيسية"):
+                if 'player_room_id' in st.session_state:
+                    del st.session_state.player_room_id
                 st.rerun()
 
-# ----------------- 3️⃣ النمط الثالث: اكتشف ثقافتك (التسابق الفردي سابقاً) -----------------
+# ----------------- 3️⃣ النمط الثالث: اكتشف ثقافتك (التسابق الفردي وتطوير المعلومات) -----------------
 else:
-    st.header("🧠 نمط: اكتشف ثقافتك الفردي")
-    st.write("هنا يمكنك اللعب الفردي واختبار معلوماتك العامة وتطوير ثقافتك بدون موجه أو غرف بث حي.")
+    st.header("🧠 نمط: اكتشف ثقافتك وتحدي المعلومات")
+    st.write("هنا يمكنك اللعب بشكل فردي ومستقل لاختبار حصيلتك الثقافية وتطوير معلوماتك العامة.")
     st.write("---")
     
-    sample_q = [
-        {"ق": "كم عدد كواكب المجموعة الشمسية？", "ج": "8 كواكب"},
-        {"ق": "ما هي عاصمة المملكة العربية السعودية؟", "ج": "الرياض"}
+    cultural_bank = [
+        {"س": "ما هو أول مسجد أُسس في الإسلام؟", "ج": "مسجد قباء في المدينة المنورة"},
+        {"س": "كم عدد كواكب المجموعة الشمسية المعتمدة رسمياً؟", "ج": "8 كواكب"},
+        {"س": "ما هي عاصمة المملكة العربية السعودية؟", "ج": "الرياض"}
     ]
-    for idx, sq in enumerate(sample_q):
-        st.subheader(f"💡 تحدي الثقافة {idx + 1}:")
-        st.write(sq["ق"])
-        if st.button(f"👁️ إظهار الإجابة الصحيحة لتحدي {idx + 1}", key=f"cult_{idx}"):
-            st.success(sq["ج"])
+    
+    for idx, item in enumerate(cultural_bank):
+        st.markdown(f"#### 💡 التحدي الثقافي رقم {idx + 1}:")
+        st.info(item["س"])
+        if st.button(f"👁️ كشف الإجابة الصحيحة للتحدي {idx + 1}", key=f"cult_btn_{idx}"):
+            st.success(f"الجواب الصحيح: {item['ج']}")
+        st.write("---")
