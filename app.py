@@ -90,7 +90,7 @@ def show_live_chat(room_id, user_name, is_admin):
         c_text = col_c1.text_input("اكتب رسالة فورية:", label_visibility="collapsed", key=f"in_{room_id}")
         if col_c2.form_submit_button("إرسال"):
             if c_text:
-                db["rooms"][room_id]["chat_history"].append({"user_type": "admin" if is_admin else "player", "name": "المدير (أبو صالح)" if is_admin else user_name, "text": c_text})
+                db["rooms"][room_id]["chat_history"].append({"user_type": "admin" if is_admin else "player", "name": "المدير " if is_admin else user_name, "text": c_text})
                 st.rerun()
     time.sleep(2); st.rerun()
 
@@ -169,7 +169,7 @@ with st.sidebar:
 
 # الصفحة الرئيسية للموقع
 if st.session_state.curr_page == "home":
-    st.markdown("<h2 style='text-align:center; color:#4F46E5;'>منصة مسابقات هيا العائلية 🎯</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center; color:#4F46E5;'>منصة مسابقات هيا  🎯</h2>", unsafe_allow_html=True)
     col_l_img, col_r_btn = st.columns([1, 2])
     with col_l_img:
         if os.path.exists("my_kids.png"):
@@ -190,18 +190,25 @@ if st.session_state.curr_page == "home":
             if st.button("🕹️ تحدي اختبر نفسك الفردي", use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
         with col_b4:
             st.info("👥 طور المجموعات والفرق قيد التأسيس")
-
-# صفحة تواصل معنا
+# صفحة تواصل معنا المحدثة بخانات الاتصال
 elif st.session_state.curr_page == "contact_mode":
     st.markdown("### 📞 صفحة تواصل معنا")
     with st.form("contact"):
         c_name = st.text_input("اسمك الكريم:")
+        c_email = st.text_input("البريد الإلكتروني (اختياري):")
+        c_phone = st.text_input("رقم الجوال (اختياري):")
         c_msg_txt = st.text_area("اكتب رسالتك لمالك التطبيق:")
-        if st.form_submit_button("📤 إإرسال الرسالة الحين"):
+        
+        if st.form_submit_button("📤 إرسال الرسالة "):
             if c_name and c_msg_txt: 
-                db["messages"].append({"name": c_name, "msg": c_msg_txt})
+                # دمج معلومات الاتصال داخل نص الرسالة لتظهر لك في صندوق الوارد مباشرة
+                full_details = f"{c_msg_txt}\n\n📧 إيميل: {c_email if c_email else 'لم يذكر'}\n📱 جوال: {c_phone if c_phone else 'لم يذكر'}"
+                
+                db["messages"].append({"name": c_name, "msg": full_details})
                 save_local_data("messages.json", db["messages"])
-                st.success("🎉 تم الإرسال بنجاح! وذهبت لصندوق وارد المالك على اليسار.")
+                st.success("🎉 تم الإرسال بنجاح! .")
+            else:
+                st.warning("⚠️ يرجى كتابة الاسم ونص الرسالة أولاً.")
 
 # إدارة مسابقة حية
 elif st.session_state.curr_page == "admin_mode":
@@ -225,12 +232,12 @@ elif st.session_state.curr_page == "admin_mode":
     else:
         rid = st.session_state.my_live_room; rdata = db["rooms"].get(rid)
         if rdata:
-            st.success(f"🎲 رقم الغرفة المعتمد للأبناء للدخول هو: **{rid}**")
+            st.success(f"🎲 رقم الغرفة المعتمد للدخول هو: **{rid}**")
             col_l, col_r = st.columns([2, 1])
             with col_l:
                 st.markdown("#### 👥 حالة إجابات المتسابقين الحالية:")
                 for pl in rdata["players"]:
-                    st.write(f"- **{pl}**: {'✅ تمت الإجابة الكفو' if pl in rdata['answered_players'] else '⏳ يفكر ويحسب الحل...'}")
+                    st.write(f"- **{pl}**: {'✅ تمت الإجابة الكفو' if pl in rdata['answered_players'] else '⏳ يفكر وبدوّر الحل ...'}")
                 st.write("---")
                 
                 if rdata["status"] == "waiting":
@@ -262,7 +269,7 @@ elif st.session_state.curr_page == "admin_mode":
                     for rank, (p, s) in enumerate(sorted_sc):
                         st.write(f"### 🏅 المركز {rank+1}: **{p}** حصد {s} نقطة كاملة!")
                         
-                if st.button("🛑 تدمير وإنهاء الغرفة"):
+                if st.button("🛑 إنهاء الغرفة"):
                     if rid in db["rooms"]: del db["rooms"][rid]
                     del st.session_state.my_live_room; st.session_state.generated_room_code = None; st.rerun()
             with col_r: show_live_chat(rid, "المدير", is_admin=True)
@@ -315,16 +322,30 @@ elif st.session_state.curr_page == "player_mode":
                         rem = max(0, int(rdata["duration"] - (time.time() - rdata["q_start_time"])))
                         st.warning(f"⏳ متبقي عندك للتفكير: {rem} ثانية!")
                         
-                        if rem <= 0:
-                            st.error("❌ انتهى الوقت المخصص للحل! لقد أخطأت في حل هذا السؤال.")
+                        # تفقد حالة إذا كان المتسابق قد ضغط زر الاعتماد مسبقاً لمنع ظهور رسالة انتهاء الوقت الخاطئة
+                        has_answered = pname in rdata["answered_players"]
+
+                        if rem <= 0 and not has_answered:
+                            st.error("⏱️ انتهى الوقت المخصص للسؤال!")
                             st.info(f"💡 المعلومة الصحيحة لتثقيفك هي: **{c_ans}**")
-                            time.sleep(3); st.rerun()
-                        if st.button("✔️ اعتماد الإجابة"):
-                            if pname not in db["rooms"][rid]["answered_players"]: db["rooms"][rid]["answered_players"].append(pname)
-                            if sel == c_ans: 
-                                st.balloons(); st.success("صح بطل كفو! 🥳"); db["rooms"][rid]["scores"][pname] += 10
-                            else: 
-                                st.error("❌ للأسف إجابة خاطئة ركز في القادم!"); st.info(f"💡 معلومة لتثقيفك: الصح هو **{c_ans}**")
+                            time.sleep(3)
+                            st.rerun()
+                        
+                        # إبقاء إشعار النتيجة والتثقيف ظاهراً للطفل إذا جاوب قبل انتهاء الوقت
+                        if has_answered:
+                            if sel == c_ans:
+                                st.success("صح بطل كفو! 🥳")
+                            else:
+                                st.error("❌ للأسف إجابة خاطئة ركز في القادم!")
+                                st.info(f"💡 معلومة لتثقيفك: الصح هو **{c_ans}**")
+                        else:
+                            if st.button("✔️ اعتماد الإجابة"):
+                                if pname not in db["rooms"][rid]["answered_players"]: 
+                                    db["rooms"][rid]["answered_players"].append(pname)
+                                if sel == c_ans: 
+                                    st.balloons()
+                                    db["rooms"][rid]["scores"][pname] += 10
+                                st.rerun()
                         time.sleep(1); st.rerun()
                     else: st.success("🏁 انتهت الأسئلة بانتظار عرض لوحة الصدارة النهائية...")
                 elif rdata["status"] == "finished":
@@ -344,7 +365,7 @@ elif st.session_state.curr_page == "culture_mode":
     if c_status == "idle":
         q_choice = st.radio("اختر القسم الثقافي المتاح:", ["قسم الأطفال 👶", "قسم الكبار 🧔 (غير مفعل الحين)"])
         if "الكبار" in q_choice and not db["adults_q"]: 
-            st.error("⚠️ هذا القسم معطل حالياً (Deactivated) لعدم رفع ملف أسئلة الكبار من لوحة المالك على اليسار.")
+            st.error("⚠️ هذا القسم معطل حالياً (Deactivated) لعدم رفع ملف أسئلة الكبار من عبدالاله العنزي.")
         else:
             if st.button("✨ ابدأ التحدي الفردي الحين"):
                 pool = db["kids_q"] if "الأطفال" in q_choice else db["adults_q"]
