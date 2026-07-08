@@ -3,6 +3,7 @@ import pandas as pd
 import time
 import random
 import os
+import json
 from datetime import datetime
 
 # 1. إعدادات الصفحة والهوية البصرية وتحسين الألوان
@@ -27,31 +28,47 @@ st.markdown("""
     .msg-box-admin { background-color: #DCF8C6; padding: 8px 12px; border-radius: 8px; margin: 5px 0; text-align: right; align-self: flex-end; max-width: 80%; }
     .msg-box-player { background-color: #FFFFFF; padding: 8px 12px; border-radius: 8px; margin: 5px 0; text-align: right; align-self: flex-start; max-width: 80%; }
     .message-box { background-color: #F3F4F6; border-right: 5px solid #4F46E5; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9rem; color: #374151; }
-    .leaderboard-box { background: linear-gradient(135deg, #6EE7B7 0%, #3B82F6 100%); padding: 20px; border-radius: 12px; color: white; text-align: center; font-weight: bold; font-size: 1.5rem; }
+    .leaderboard-box { background: linear-gradient(135deg, #6EE7B7 0%, #3B82F6 100%); padding: 20px; border-radius: 12px; color: white; text-align: center; font-weight: bold; font-size: 1.5rem; margin-bottom: 20px; }
     .footer-text { text-align: center; color: #9CA3AF; font-size: 1rem; font-weight: 500; padding: 20px 0; border-top: 1px solid #E5E7EB; margin-top: 50px; }
     </style>
 """, unsafe_allow_html=True)
+
+# دوال مساعدة لربط وحفظ البيانات دائمياً في ملفات السيرفر الصلبة لكي لا تختفي أبداً
+def load_local_data(filename, default_val):
+    if os.path.exists(filename):
+        with open(filename, "r", encoding="utf-8") as f:
+            try:
+                return json.load(f)
+            except:
+                return default_val
+    return default_val
+
+def save_local_data(filename, data):
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 # 2. تفعيل الذاكرة الدائمة المحصنة في السيرفر لضمان بقاء البيانات للضيوف دائماً
 @st.cache_resource
 def get_server_db():
     return {
         "rooms": {}, 
-        "kids_q": [], 
-        "adults_q": [], 
-        "manual_q": [], 
-        "messages": [], 
-        "total_visitors": 0, 
-        "visitor_history": {}
+        "kids_q": load_local_data("kids_questions.json", []), 
+        "adults_q": load_local_data("adults_questions.json", []), 
+        "manual_q": load_local_data("manual_questions.json", []), 
+        "messages": load_local_data("messages.json", []), 
+        "total_visitors": load_local_data("total_v.json", 0), 
+        "visitor_history": load_local_data("history_v.json", {})
     }
 
 db = get_server_db()
 
-# محرك العداد الذكي للزوار
+# محرك العداد الذكي للزوار التراكمي
 if 'counted' not in st.session_state:
     db["total_visitors"] += 1
     today_str = datetime.now().strftime("%Y-%m-%d")
     db["visitor_history"][today_str] = db["visitor_history"].get(today_str, 0) + 1
+    save_local_data("total_v.json", db["total_visitors"])
+    save_local_data("history_v.json", db["visitor_history"])
     st.session_state.counted = True
 
 # تهيئة متغيرات الجلسة الأساسية
@@ -86,26 +103,26 @@ with navbar_cols[1]:
 
 st.write("---")
 
-# 📥 لوحة المالك المستقلة في القائمة الجانبية (Sidebar)
+# 📥 لوحة الإعدادات المتقدمة في القائمة الجانبية (Sidebar) المغلقة برمز سري خفي وبدون كلمة "المالك"
 with st.sidebar:
-    st.markdown("### ⚙️ لوحة المالك (أدمن)")
+    st.markdown("### ⚙️ الإعدادات")
     
     if not st.session_state.admin_authenticated:
-        admin_pass = st.text_input("أدخل الرقم السري للمالك الخفي:", type="password")
-        if st.button("🔓 فتح لوحة التحكم"):
+        admin_pass = st.text_input("🔑 أدخل الرمز السري لفتح الإعدادات المتقدمة:", type="password")
+        if st.button("🔓 تأكيد الدخول"):
             if admin_pass == "Abdulelah@2026":
                 st.session_state.admin_authenticated = True
-                st.success("تم الدخول بنجاح!")
                 st.rerun()
             else:
-                st.error("❌ الرقم السري غير صحيح!")
+                st.error("❌ الرمز السري غير صحيح!")
     else:
-        if st.button("🚪 تسجيل الخروج من اللوحة"):
+        if st.button("🚪 خروج من الإعدادات"):
             st.session_state.admin_authenticated = False
             st.rerun()
             
         st.write("---")
-        st.metric(label="📊 عدد زوار الموقع الكلي", value=f"{db['total_visitors']} زائر")
+        # عرض الزيارات الحالية والتراكمية للفترات السابقة
+        st.metric(label="📊 إجمالي الزيارات التراكمية", value=f"{db['total_visitors']} زيارة")
         if db["visitor_history"]:
             df_v = pd.DataFrame(list(db["visitor_history"].items()), columns=["التاريخ", "الزيارات"])
             st.line_chart(df_v.set_index("التاريخ"), height=130)
@@ -115,12 +132,14 @@ with st.sidebar:
         k_file = st.file_uploader("إكسيل الأطفال:", type=["xlsx"], key="side_k")
         if k_file: 
             db["kids_q"] = pd.read_excel(k_file).to_dict(orient='records')
-            st.success(f"✅ تم الحفظ بالسيرفر ({len(db['kids_q'])} سؤال)")
+            save_local_data("kids_questions.json", db["kids_q"])
+            st.success(f"✅ تم الحفظ الدائم بالسيرفر ({len(db['kids_q'])} سؤال)")
         
         a_file = st.file_uploader("إكسيل الكبار:", type=["xlsx"], key="side_a")
         if a_file: 
             db["adults_q"] = pd.read_excel(a_file).to_dict(orient='records')
-            st.success(f"✅ تم الحفظ بالسيرفر ({len(db['adults_q'])} سؤال)")
+            save_local_data("adults_questions.json", db["adults_q"])
+            st.success(f"✅ تم الحفظ الدائم بالسيرفر ({len(db['adults_q'])} سؤال)")
         
         st.write("---")
         st.markdown("📝 **كتابة سؤال يدوي جديد**")
@@ -133,21 +152,26 @@ with st.sidebar:
             if st.form_submit_button("➕ حفظ وإدراج السؤال اليدوي"):
                 if mq and o1: 
                     db["manual_q"].append({"السؤال": mq, "الخيار 1 - الصحيح": o1, "الخيار 2": o2, "الخيار 3": o3, "الخيار 4": o4})
+                    save_local_data("manual_questions.json", db["manual_q"])
                     st.success("🎯 تم الحفظ وسيظهر بالجولة!")
                 
         st.write("---")
         st.markdown("📬 **صندوق وارد الرسائل**")
         if not db["messages"]: 
             st.info("الصندوق فارغ حالياً.")
-        for msg in reversed(db["messages"]):
-            st.markdown(f"<div class='message-box'><strong>👤 {msg['name']}:</strong><br>{msg['msg']}</div>", unsafe_allow_html=True)
+        else:
+            for idx, msg in enumerate(list(db["messages"])):
+                st.markdown(f"<div class='message-box'><strong>👤 {msg['name']}:</strong><br>{msg['msg']}</div>", unsafe_allow_html=True)
+                if st.button("🗑️ حذف الرسالة", key=f"del_{idx}"):
+                    db["messages"].remove(msg)
+                    save_local_data("messages.json", db["messages"])
+                    st.rerun()
 
 # الصفحة الرئيسية للموقع
 if st.session_state.curr_page == "home":
     st.markdown("<h2 style='text-align:center; color:#4F46E5;'>منصة مسابقات هيا العائلية 🎯</h2>", unsafe_allow_html=True)
     col_l_img, col_r_btn = st.columns([1, 2])
     with col_l_img:
-        # [تصحيح صريح هنا لمنع الخطأ التشوهي الظاهر بالصورة نهائياً]
         if os.path.exists("my_kids.png"):
             st.image("my_kids.png", use_container_width=True)
         else:
@@ -159,7 +183,7 @@ if st.session_state.curr_page == "home":
         with col_b1:
             if st.button("🏆 إنشاء وإدارة مسابقة حية", use_container_width=True): st.session_state.curr_page = "admin_mode"; st.rerun()
         with col_b2:
-            if st.button("🎮 دخول كمتسابق للأبناء", use_container_width=True): st.session_state.curr_page = "player_mode"; st.rerun()
+            if st.button("🎮 دخول كمتسابق", use_container_width=True): st.session_state.curr_page = "player_mode"; st.rerun()
         st.write("---")
         col_b3, col_b4 = st.columns(2)
         with col_b3:
@@ -173,9 +197,10 @@ elif st.session_state.curr_page == "contact_mode":
     with st.form("contact"):
         c_name = st.text_input("اسمك الكريم:")
         c_msg_txt = st.text_area("اكتب رسالتك لمالك التطبيق:")
-        if st.form_submit_button("📤 إرسال الرسالة الحين"):
+        if st.form_submit_button("📤 إإرسال الرسالة الحين"):
             if c_name and c_msg_txt: 
                 db["messages"].append({"name": c_name, "msg": c_msg_txt})
+                save_local_data("messages.json", db["messages"])
                 st.success("🎉 تم الإرسال بنجاح! وذهبت لصندوق وارد المالك على اليسار.")
 
 # إدارة مسابقة حية
@@ -244,7 +269,24 @@ elif st.session_state.curr_page == "admin_mode":
 
 # دخول كمتسابق
 elif st.session_state.curr_page == "player_mode":
+    col_back1, col_back2 = st.columns([5, 1])
+    with col_back2:
+        if st.button("↩️ العودة للخلف"):
+            st.session_state.curr_page = "home"
+            st.rerun()
+            
     st.header("🕹️ شاشة انضمام المتسابقين الأبطال")
+    
+    if 'joined_live_room' in st.session_state:
+        if st.button("🚪 الخروج من المسابقة والانسحاب"):
+            rid = st.session_state.joined_live_room
+            pname = st.session_state.my_joined_name
+            if rid in db["rooms"] and pname in db["rooms"][rid]["players"]:
+                db["rooms"][rid]["players"].remove(pname)
+            del st.session_state.joined_live_room
+            st.session_state.curr_page = "home"
+            st.rerun()
+            
     if 'joined_live_room' not in st.session_state:
         cc = st.text_input("أدخل رقم الغرفة (4 أرقام):")
         cn = st.text_input("أدخل اسمك الكريم:")
@@ -326,5 +368,5 @@ elif st.session_state.curr_page == "culture_mode":
     elif c_status == "finished":
         st.success(f"🏆 النتيجة النهائية: لقد أجبت بشكل صحيح على {st.session_state.individual_challenge['correct_ans']} من أصل {len(st.session_state.individual_challenge['q_list'])} سؤال!")
 
-# 5. تذييل الحقوق والتوقيع الثابت بالعربي والإنجليزي
-st.markdown("<div class='footer-text'>تطوير عبد الإله العنزي | Developed by Abdulelah Al-Anzi</div>", unsafe_allow_html=True)
+# 5. تذييل الحقوق والتوقيع الثابت بالعربي والإنجليزي المطور كلياً
+st.markdown("<div class='footer-text'>تطوير عبد الإله العنزي | Developed by Abdulelah Al-Enazi</div>", unsafe_allow_html=True)
