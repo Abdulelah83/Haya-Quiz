@@ -101,6 +101,50 @@ TOPICS = {
 direction = "rtl" if st.session_state.lang == "ar" else "ltr"
 align = "right" if st.session_state.lang == "ar" else "left"
 
+# كود حقن HTML و JavaScript لإجبار وإرشاد المستخدمين لتثبيت التطبيق (منصة هيا) على الديسكتوب أو الشاشة الرئيسية للآيفون وسفاري
+st.markdown("""
+<script>
+    // التأكد من أن الإرشاد يظهر فقط في المرة الأولى عبر التخزين المحلي للمتصفح
+    if (!localStorage.getItem('haya_app_installed_v1')) {
+        // فحص ما إذا كان التطبيق مفتوحاً مسبقاً كتطبيق مثبت أو كمتصفح عادي
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        
+        if (!isStandalone) {
+            // إنشاء نافذة إرشادية منبثقة بشكل فخم في واجهة الصفحة
+            setTimeout(() => {
+                const overlay = document.createElement('div');
+                overlay.id = 'pwa-prompt-overlay';
+                overlay.style = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999999; display:flex; justify-content:center; align-items:center; font-family:sans-serif; direction:rtl;';
+                
+                overlay.innerHTML = `
+                    <div style="background:linear-gradient(135deg, #F0F9FF 0%, #BAE6FD 100%); padding:25px; border-radius:20px; width:85%; max-width:450px; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.3); border:3px solid #0284C7;">
+                        <h2 style="color:#0369A1; margin-top:0; font-size:1.6rem;">📱 ثبّت تطبيق "منصة هيا" الحين!</h2>
+                        <p style="color:#334155; font-size:1.05rem; line-height:1.6;">للحصول على سرعة جبارة، تجربة مبهجة للأطفال، وتصفح ملء الشاشة بدون أشرطة المتصفح المزعجة، أضف المنصة لشاشتك الرئيسية كـ تطبيق.</p>
+                        
+                        <div style="background:#FFF; padding:15px; border-radius:12px; margin:20px 0; border:1px dashed #0284C7; text-align:right; font-size:0.95rem; color:#1E293B;">
+                            <strong>💡 لمستخدمي آيفون وسفاري (Safari):</strong><br>
+                            1. اضغط على زر <strong>المشاركة (Share)</strong> 📤 بالأسفل.<br>
+                            2. اختر <strong>إضافة إلى الشاشة الرئيسية (Add to Home Screen)</strong> ➕.<br><br>
+                            <strong>💡 لمستخدمي الكمبيوتر وجوجل كروم:</strong><br>
+                            1. اضغط على أيقونة الشاشة أو التثبيت في شريط الرابط بالأعلى 🖥️.<br>
+                            2. اضغط على <strong>Install / تثبيت</strong>.
+                        </div>
+                        
+                        <button id="close-pwa-btn" style="background:#0284C7; color:#FFF; border:none; padding:12px 30px; border-radius:10px; font-size:1.1rem; font-weight:bold; cursor:pointer; width:100%;">لقد قمت بالتثبيت / الدخول للموقع</button>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+                
+                document.getElementById('close-pwa-btn').addEventListener('click', () => {
+                    localStorage.setItem('haya_app_installed_v1', 'true');
+                    document.getElementById('pwa-prompt-overlay').remove();
+                });
+            }, 1500); // تظهر بعد ثانية ونصف من فتح الموقع لإبهار الزائر
+        }
+    }
+</script>
+""", unsafe_allow_html=True)
+
 # دمج ألوان السماء المبهجة والخطوط الاحترافية المريحة للعين
 st.markdown(f"""
     <style>
@@ -175,7 +219,7 @@ def get_server_db():
     return {
         "rooms": {}, 
         "messages": load_local_data("messages.json", []), 
-        "total_visitors": load_local_data("total_v.json", 120) # تبدأ تراكمية ومحفوظة بالكامل
+        "total_visitors": load_local_data("total_v.json", 120)
     }
 
 db = get_server_db()
@@ -215,7 +259,6 @@ with st.sidebar:
             st.session_state.admin_authenticated = False
             st.rerun()
         st.write("---")
-        # عرض نوعين من العدادات بناءً على رغبتك المحفوظة والتراكمية
         st.metric(label=lang_dict["visits_current"], value="1 منشط حالياً")
         st.metric(label=lang_dict["visits_total"], value=f"{db['total_visitors']} زيارة")
         
@@ -230,7 +273,6 @@ with st.sidebar:
                     st.write(f"**البريد:** {msg.get('email', 'غير متوفر')}")
                     st.write(f"**الرسالة:** {msg.get('msg', '')}")
                     
-                    # أزرار لوحة التحكم بالرسالة المحددة للرد أو الحذف
                     c_btn1, c_btn2 = st.columns(2)
                     with c_btn1:
                         if st.button("🗑️ حذف", key=f"del_{idx}"):
@@ -258,7 +300,7 @@ if st.session_state.curr_page == "home":
         st.write("---")
         if st.button(lang_dict["test_yourself"], use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
 
-# صفحة تواصل معنا المطورة بالخانات الجديدة المطلوبة بدقة
+# صفحة تواصل معنا المطورة
 elif st.session_state.curr_page == "contact_mode":
     st.markdown(f"### {lang_dict['contact']}")
     with st.form("contact_form_advanced"):
@@ -284,15 +326,12 @@ elif st.session_state.curr_page == "admin_mode":
     if 'my_live_room' not in st.session_state:
         q_src = st.radio(lang_dict["q_src_label"], [lang_dict["q_src_kids"], lang_dict["q_src_adults"]])
         
-        # إذا تم اختيار فئة الأطفال يظهر منزلق العمر الذكي فوراً من 6 إلى 17 سنة لضبط مستوى صعوبة الكلمات والأسئلة العربية
         chosen_age = None
         if q_src == lang_dict["q_src_kids"]:
             chosen_age = st.slider(lang_dict["age_label"], 6, 17, 10)
             
         q_topic = st.selectbox(lang_dict["category_label"], TOPICS[st.session_state.lang])
         num_q = st.number_input(lang_dict["num_q_label"], min_value=1, max_value=20, value=5)
-        
-        # تثبيت مؤشر الوقت الافتراضي على 30 ثانية لتجنب البطء وضمان أريحية التفكير
         t_val = st.slider(lang_dict["time_q_label"], 5, 60, 30)
         
         if st.button(lang_dict["gen_room_btn"]):
@@ -310,7 +349,6 @@ elif st.session_state.curr_page == "admin_mode":
             }
             st.rerun()
     else:
-        # كود إدارة الغرفة الحية مستقر ومحفوظ
         rid = st.session_state.my_live_room; rdata = db["rooms"].get(rid)
         if rdata:
             st.success(f"🎲 رقم الغرفة المباشرة: **{rid}**")
@@ -336,7 +374,7 @@ elif st.session_state.curr_page == "admin_mode":
                 if rid in db["rooms"]: del db["rooms"][rid]
                 del st.session_state.my_live_room; st.session_state.generated_room_code = None; st.rerun()
 
-# صفحة اختبر نفسك (ثقّف نفسك) الفردية المفعلة كلياً بالذكاء الاصطناعي
+# صفحة اختبر نفسك (ثقّف نفسك)
 elif st.session_state.curr_page == "culture_mode":
     st.markdown(f"<h2 style='text-align:center; color:#0369A1;'>🕹️ {lang_dict['test_yourself']}</h2>", unsafe_allow_html=True)
     
