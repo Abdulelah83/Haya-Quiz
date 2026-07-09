@@ -19,7 +19,12 @@ st.set_page_config(
 if 'curr_page' not in st.session_state: st.session_state.curr_page = "home"
 if 'generated_room_code' not in st.session_state: st.session_state.generated_room_code = None
 if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
-if 'lang' not in st.session_state: st.session_state.lang = "ar"  # اللغة الافتراضية
+if 'lang' not in st.session_state: st.session_state.lang = "ar"
+
+# ربط الـ API الخاص بجيمني بشكل آمن عبر متغيرات البيئة في ريندر
+api_key = os.environ.get("GEMINI_API_KEY", "")
+if api_key:
+    genai.configure(api_key=api_key)
 
 # قاموس اللغتين لضمان سهولة التحويل الكامل للموقع
 TRANSLATIONS = {
@@ -28,7 +33,7 @@ TRANSLATIONS = {
         "home": "🏠 الرئيسية",
         "contact": "📞 تواصل معنا",
         "settings": "⚙️ الإعدادات",
-        "secret_key": "🔑 أدخل الرمز السري لفتح الإعدادات المتقدمة:",
+        "secret_key": "🔑 الرمز السري لوحة الموجه:",
         "confirm": "🔓 تأكيد الدخول",
         "logout": "🚪 خروج من الإعدادات",
         "wrong_pass": "❌ الرمز السري غير صحيح!",
@@ -43,9 +48,9 @@ TRANSLATIONS = {
         "time_q_label": "الوقت المتاح لكل سؤال (ثواني):",
         "gen_room_btn": "🎲 توليد غرفة المسابقة عبر Gemini AI",
         "q_src_label": "اختر الفئة للجولة المستهدفة:",
-        "q_src_kids": "أسئلة الأطفال",
-        "q_src_adults": "أسئلة الكبار",
-        "q_src_qudrat": "اختبار القدرات والتحصيلي 🇸🇦",
+        "q_src_kids": "قسم الأطفال 👶",
+        "q_src_adults": "قسم الكبار 🧔",
+        "category_label": "اختر تصنيف الأسئلة المستهدف:",
         "correct_notify": "صح بطل كفو! 🥳",
         "wrong_notify": "❌ للأسف إجابة خاطئة ركز في القادم!",
         "correct_is": "💡 الصح هو:"
@@ -70,9 +75,9 @@ TRANSLATIONS = {
         "time_q_label": "Time Limit per Question (Seconds):",
         "gen_room_btn": "🎲 Generate Quiz Room via Gemini AI",
         "q_src_label": "Choose Category for Target Round:",
-        "q_src_kids": "Kids Questions",
-        "q_src_adults": "Adults Questions",
-        "q_src_qudrat": "Qudrat & Tahsili Exams 🇸🇦",
+        "q_src_kids": "Kids Section 👶",
+        "q_src_adults": "Adults Section 🧔",
+        "category_label": "Select Questions Topic:",
         "correct_notify": "Correct! Excellent Job! 🥳",
         "wrong_notify": "❌ Unfortunately Wrong, Focus on Next!",
         "correct_is": "💡 Correct Answer is:"
@@ -81,7 +86,12 @@ TRANSLATIONS = {
 
 lang_dict = TRANSLATIONS[st.session_state.lang]
 
-# تخصيص CSS للمظهر الفخم والألوان الجذابة مع دعم اتجاه النص حسب اللغة
+# قائمة التصانيف المطلوبة بالعربي والإنجليزي
+TOPICS = {
+    "ar": ["إسلاميات", "لغة عربية", "علوم", "رياضيات", "اجتماعيات", "طبيعة وجغرافيا", "ثقافة عامة منوعة"],
+    "en": ["Islamic Studies", "Arabic Language", "Science", "Mathematics", "Social Studies", "Nature & Geography", "General Culture"]
+}
+
 direction = "rtl" if st.session_state.lang == "ar" else "ltr"
 align = "right" if st.session_state.lang == "ar" else "left"
 
@@ -102,16 +112,15 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# دالة لتوليد الأسئلة فورياً وذكياً عبر Gemini بحد أقصى 20 سؤالاً
-def generate_questions_via_gemini(category, count, lang):
+# دالة ذكية لتوليد الأسئلة من جمني بناءً على الفئة والعمر والتصنيف المحدد
+def generate_questions_via_gemini(category, topic, count, lang):
     try:
-        # الاتصال بنموذج Gemini الفائق والذكي المتاح في حسابك
-        genai.configure() 
         model = genai.GenerativeModel('gemini-2.5-flash')
-        
         prompt = f"""
-        You are a professional quiz generator for a platform called Haya-Quiz.
-        Generate exactly {count} multiple-choice questions for the category: '{category}'.
+        You are a professional quiz generator for Haya-Quiz.
+        Generate exactly {count} multiple-choice questions.
+        Target Age Group Group: '{category}'.
+        Specific Topic/Classification: '{topic}'.
         The output language MUST be: '{lang}'.
         
         Return the response ONLY as a valid JSON array of objects, with no markdown formatting, no ```json tags.
@@ -122,26 +131,23 @@ def generate_questions_via_gemini(category, count, lang):
         - "الخيار 3": Wrong answer 2.
         - "الخيار 4": Wrong answer 3.
         """
-        
         response = model.generate_content(prompt)
         text_clean = response.text.strip().replace("```json", "").replace("```", "")
-        questions_list = json.loads(text_clean)
-        return questions_list
+        return json.loads(text_clean)
     except Exception as e:
-        # حل بديل (Fallback) في حال حدوث أي خطأ بالاتصال لتأمين استمرار اللعبة دون توقف
-        st.warning(f"AI connection notice, using standby questions.")
+        st.warning("AI auto-fallback activated.")
         fallback_q = []
         for i in range(count):
             fallback_q.append({
-                "السؤال": f"سؤال تجريبي رقم {i+1} في قسم {category}",
-                "الخيار 1 - الصحيح": "الخيار الصحيح",
-                "الخيار 2": "خيار خطأ أ",
-                "الخيار 3": "خيار خطأ ب",
-                "الخيار 4": "خيار خطأ ج"
+                "السؤال": f"سؤال سريع رقم {i+1} في {topic} ({category})",
+                "الخيار 1 - الصحيح": "الجواب الصحيح الافتراضي",
+                "الخيار 2": "خيار بديل أ",
+                "الخيار 3": "خيار بديل ب",
+                "الخيار 4": "خيار بديل ج"
             })
         return fallback_q
 
-# دوال مساعدة لربط وحفظ البيانات دائمياً في ملفات السيرفر الصلبة
+# دوال الذاكرة الدائمة في السيرفر
 def load_local_data(filename, default_val):
     if os.path.exists(filename):
         with open(filename, "r", encoding="utf-8") as f:
@@ -164,7 +170,7 @@ def get_server_db():
 
 db = get_server_db()
 
-# محرك العداد الذكي للزوار التراكمي
+# عداد الزوار
 if 'counted' not in st.session_state:
     db["total_visitors"] += 1
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -191,14 +197,12 @@ def show_live_chat(room_id, user_name, is_admin):
                 st.rerun()
     time.sleep(2); st.rerun()
 
-# الشريط العلوي الثابت للمنصة وزر تحويل اللغة الذكي
+# الهيدر العلوي وتحويل اللغة
 navbar_cols = st.columns([1, 4, 1])
 with navbar_cols[1]:
     col_nav1, col_nav2, col_nav3 = st.columns([2, 2, 1])
     if col_nav1.button(lang_dict["home"], use_container_width=True): st.session_state.curr_page = "home"; st.rerun()
     if col_nav2.button(lang_dict["contact"], use_container_width=True): st.session_state.curr_page = "contact_mode"; st.rerun()
-    
-    # زر تحويل اللغة الفوري
     current_lang_label = "🌐 English" if st.session_state.lang == "ar" else "🌐 العربية"
     if col_nav3.button(current_lang_label, use_container_width=True):
         st.session_state.lang = "en" if st.session_state.lang == "ar" else "ar"
@@ -206,7 +210,6 @@ with navbar_cols[1]:
 
 st.write("---")
 
-# القائمة الجانبية (Sidebar) المحصنة للتحكم والزيارات والتنبيهات المذكورة
 with st.sidebar:
     st.markdown(f"### {lang_dict['settings']}")
     if not st.session_state.admin_authenticated:
@@ -215,8 +218,7 @@ with st.sidebar:
             if admin_pass == "Abdulelah@2026":
                 st.session_state.admin_authenticated = True
                 st.rerun()
-            else:
-                st.error(lang_dict["wrong_pass"])
+            else: st.error(lang_dict["wrong_pass"])
     else:
         if st.button(lang_dict["logout"]):
             st.session_state.admin_authenticated = False
@@ -224,14 +226,13 @@ with st.sidebar:
         st.write("---")
         st.metric(label=lang_dict["visits"], value=f"{db['total_visitors']}")
 
-# الصفحة الرئيسية للموقع
+# الصفحة الرئيسية
 if st.session_state.curr_page == "home":
     st.markdown(f"<h2 style='text-align:center; color:#4F46E5;'>{lang_dict['title']}</h2>", unsafe_allow_html=True)
     col_l_img, col_r_btn = st.columns([1, 2])
     with col_l_img:
         if os.path.exists("my_kids.png"): st.image("my_kids.png", use_container_width=True)
-        else: st.info("🎮 Haya Multi-Quiz System")
-            
+        else: st.info("🎮 Haya Quiz Platform")
     with col_r_btn:
         st.write(lang_dict["ready"])
         col_b1, col_b2 = st.columns(2)
@@ -243,10 +244,8 @@ if st.session_state.curr_page == "home":
         col_b3, col_b4 = st.columns(2)
         with col_b3:
             if st.button(lang_dict["test_yourself"], use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
-        with col_b4:
-            st.info(lang_dict["groups_mode"])
+        with col_b4: st.info(lang_dict["groups_mode"])
 
-# صفحة تواصل معنا
 elif st.session_state.curr_page == "contact_mode":
     st.markdown(f"### {lang_dict['contact']}")
     with st.form("contact"):
@@ -258,19 +257,24 @@ elif st.session_state.curr_page == "contact_mode":
                 save_local_data("messages.json", db["messages"])
                 st.success("🎉 Sent Successfully! / تم الإرسال بنجاح!")
 
-# لوحة الموجه وإدارة المسابقات الحية لتوليد الأسئلة من 1 إلى 20 عبر جيمني
+# لوحة الموجه وإدارة المسابقات الحية
 elif st.session_state.curr_page == "admin_mode":
     st.markdown(f"<h2 style='text-align:center;'>{lang_dict['create_room']}</h2>", unsafe_allow_html=True)
     if 'my_live_room' not in st.session_state:
-        q_src = st.radio(lang_dict["q_src_label"], [lang_dict["q_src_kids"], lang_dict["q_src_adults"], lang_dict["q_src_qudrat"]])
+        # الاختيار بين الأطفال والكبار متاح الآن كلياً عبر الذكاء الاصطناعي
+        q_src = st.radio(lang_dict["q_src_label"], [lang_dict["q_src_kids"], lang_dict["q_src_adults"]])
         
-        # ميزة اختيار من 1 إلى 20 سؤالاً التي طلبتها بدقة
+        # قائمة التصانيف الجديدة (إسلاميات، علوم، رياضيات، إلخ)
+        q_topic = st.selectbox(lang_dict["category_label"], TOPICS[st.session_state.lang])
+        
         num_q = st.number_input(lang_dict["num_q_label"], min_value=1, max_value=20, value=5)
-        t_val = st.slider(lang_dict["time_q_label"], 5, 60, 15)
+        
+        # ضبط مؤشر الوقت افتراضياً على 22 ثانية كما طلبت بدقة يا أبو عبد الله
+        t_val = st.slider(lang_dict["time_q_label"], 5, 60, 22)
         
         if st.button(lang_dict["gen_room_btn"]):
-            with st.spinner("Gemini is generating elite questions... ⚡"):
-                chosen_questions = generate_questions_via_gemini(q_src, int(num_q), st.session_state.lang)
+            with st.spinner("Gemini is generating live elite questions... ⚡"):
+                chosen_questions = generate_questions_via_gemini(q_src, q_topic, int(num_q), st.session_state.lang)
                 
             if not st.session_state.generated_room_code: 
                 st.session_state.generated_room_code = str(random.randint(1000, 9999))
@@ -314,7 +318,7 @@ elif st.session_state.curr_page == "admin_mode":
                     del st.session_state.my_live_room; st.session_state.generated_room_code = None; st.rerun()
             with col_r: show_live_chat(rid, "المدير", is_admin=True)
 
-# دخول كمتسابق والضغط السريع الفوري على زر اعتماد الإجابة
+# دخول كمتسابق
 elif st.session_state.curr_page == "player_mode":
     if 'joined_live_room' not in st.session_state:
         cc = st.text_input("Room Code (4 Digits):")
@@ -343,7 +347,6 @@ elif st.session_state.curr_page == "player_mode":
                         rem = max(0, int(rdata["duration"] - (time.time() - rdata["q_start_time"])))
                         st.warning(f"⏳ Time Left: {rem}s")
                         
-                        # الضغط اللحظي السريع للاعتماد لمعرفة النتيجة فوراً
                         if st.button("✔️ Submit Answer / اعتماد الإجابة"):
                             if sel == c_ans:
                                 st.success(lang_dict["correct_notify"])
