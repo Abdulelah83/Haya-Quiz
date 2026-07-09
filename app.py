@@ -101,26 +101,20 @@ TOPICS = {
 direction = "rtl" if st.session_state.lang == "ar" else "ltr"
 align = "right" if st.session_state.lang == "ar" else "left"
 
-# كود حقن HTML و JavaScript لإجبار وإرشاد المستخدمين لتثبيت التطبيق (منصة هيا) على الديسكتوب أو الشاشة الرئيسية للآيفون وسفاري
+# كود حقن HTML و JavaScript لإرشاد المستخدمين لتثبيت التطبيق على الشاشة الرئيسية كـ تطبيق مستقل
 st.markdown("""
 <script>
-    // التأكد من أن الإرشاد يظهر فقط في المرة الأولى عبر التخزين المحلي للمتصفح
     if (!localStorage.getItem('haya_app_installed_v1')) {
-        // فحص ما إذا كان التطبيق مفتوحاً مسبقاً كتطبيق مثبت أو كمتصفح عادي
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-        
         if (!isStandalone) {
-            // إنشاء نافذة إرشادية منبثقة بشكل فخم في واجهة الصفحة
             setTimeout(() => {
                 const overlay = document.createElement('div');
                 overlay.id = 'pwa-prompt-overlay';
                 overlay.style = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999999; display:flex; justify-content:center; align-items:center; font-family:sans-serif; direction:rtl;';
-                
                 overlay.innerHTML = `
                     <div style="background:linear-gradient(135deg, #F0F9FF 0%, #BAE6FD 100%); padding:25px; border-radius:20px; width:85%; max-width:450px; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.3); border:3px solid #0284C7;">
                         <h2 style="color:#0369A1; margin-top:0; font-size:1.6rem;">📱 ثبّت تطبيق "منصة هيا" الحين!</h2>
                         <p style="color:#334155; font-size:1.05rem; line-height:1.6;">للحصول على سرعة جبارة، تجربة مبهجة للأطفال، وتصفح ملء الشاشة بدون أشرطة المتصفح المزعجة، أضف المنصة لشاشتك الرئيسية كـ تطبيق.</p>
-                        
                         <div style="background:#FFF; padding:15px; border-radius:12px; margin:20px 0; border:1px dashed #0284C7; text-align:right; font-size:0.95rem; color:#1E293B;">
                             <strong>💡 لمستخدمي آيفون وسفاري (Safari):</strong><br>
                             1. اضغط على زر <strong>المشاركة (Share)</strong> 📤 بالأسفل.<br>
@@ -129,23 +123,21 @@ st.markdown("""
                             1. اضغط على أيقونة الشاشة أو التثبيت في شريط الرابط بالأعلى 🖥️.<br>
                             2. اضغط على <strong>Install / تثبيت</strong>.
                         </div>
-                        
                         <button id="close-pwa-btn" style="background:#0284C7; color:#FFF; border:none; padding:12px 30px; border-radius:10px; font-size:1.1rem; font-weight:bold; cursor:pointer; width:100%;">لقد قمت بالتثبيت / الدخول للموقع</button>
                     </div>
                 `;
                 document.body.appendChild(overlay);
-                
                 document.getElementById('close-pwa-btn').addEventListener('click', () => {
                     localStorage.setItem('haya_app_installed_v1', 'true');
                     document.getElementById('pwa-prompt-overlay').remove();
                 });
-            }, 1500); // تظهر بعد ثانية ونصف من فتح الموقع لإبهار الزائر
+            }, 1500);
         }
     }
 </script>
 """, unsafe_allow_html=True)
 
-# دمج ألوان السماء المبهجة والخطوط الاحترافية المريحة للعين
+# ألوان السماء المبهجة والخطوط الاحترافية المريحة للعين
 st.markdown(f"""
     <style>
     .stApp {{
@@ -166,7 +158,7 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# دالة توليد الأسئلة الذكية عبر جيمني
+# دالة توليد الأسئلة عبر جيمني
 def generate_questions_via_gemini(category, topic, count, lang, age=None):
     try:
         model = genai.GenerativeModel('gemini-2.5-flash')
@@ -202,7 +194,6 @@ def generate_questions_via_gemini(category, topic, count, lang, age=None):
             })
         return fallback_q
 
-# دوال الذاكرة الدائمة والمحافظة التراكمية على البيانات والزيارات التاريخية
 def load_local_data(filename, default_val):
     if os.path.exists(filename):
         with open(filename, "r", encoding="utf-8") as f:
@@ -224,13 +215,12 @@ def get_server_db():
 
 db = get_server_db()
 
-# عداد الزيارات التراكمي التاريخي الذكي المحفوظ
 if 'visitor_logged' not in st.session_state:
     db["total_visitors"] += 1
     save_local_data("total_v.json", db["total_visitors"])
     st.session_state.visitor_logged = True
 
-# هيدر التنقل الثابت (الرئيسية - تواصل معنا - تحديث الصفحة - اللغة)
+# هيدر التنقل الثابت
 navbar_cols = st.columns([1, 4, 1])
 with navbar_cols[1]:
     col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([2, 2, 2, 1])
@@ -244,7 +234,6 @@ with navbar_cols[1]:
 
 st.write("---")
 
-# القائمة الجانبية للإعدادات والإحصائيات التراكمية والوارد
 with st.sidebar:
     st.markdown(f"### {lang_dict['settings']}")
     if not st.session_state.admin_authenticated:
@@ -272,7 +261,6 @@ with st.sidebar:
                     st.write(f"**الجوال:** {msg.get('phone', 'غير متوفر')}")
                     st.write(f"**البريد:** {msg.get('email', 'غير متوفر')}")
                     st.write(f"**الرسالة:** {msg.get('msg', '')}")
-                    
                     c_btn1, c_btn2 = st.columns(2)
                     with c_btn1:
                         if st.button("🗑️ حذف", key=f"del_{idx}"):
@@ -281,9 +269,9 @@ with st.sidebar:
                             st.rerun()
                     with c_btn2:
                         if st.button("↩️ رد", key=f"reply_{idx}"):
-                            st.success(f"تم فتح قناة الرد السريع إلى: {msg.get('email')}")
+                            st.success(f"تم فتح قناة الرد السريع")
 
-# محتوى الصفحة الرئيسية
+# الصفحة الرئيسية
 if st.session_state.curr_page == "home":
     st.markdown(f"<h2 class='main-title'>{lang_dict['title']}</h2>", unsafe_allow_html=True)
     col_l_img, col_r_btn = st.columns([1, 2])
@@ -300,7 +288,7 @@ if st.session_state.curr_page == "home":
         st.write("---")
         if st.button(lang_dict["test_yourself"], use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
 
-# صفحة تواصل معنا المطورة
+# صفحة تواصل معنا
 elif st.session_state.curr_page == "contact_mode":
     st.markdown(f"### {lang_dict['contact']}")
     with st.form("contact_form_advanced"):
@@ -311,21 +299,17 @@ elif st.session_state.curr_page == "contact_mode":
         if st.form_submit_button("🚀 إرسال الرسالة الآن"):
             if c_name and c_msg_txt: 
                 db["messages"].append({
-                    "name": c_name, 
-                    "phone": c_phone, 
-                    "email": c_email, 
-                    "msg": c_msg_txt,
+                    "name": c_name, "phone": c_phone, "email": c_email, "msg": c_msg_txt,
                     "time": datetime.now().strftime("%Y-%m-%d %H:%M")
                 })
                 save_local_data("messages.json", db["messages"])
-                st.success("🎉 تم إرسال رسالتك بنجاح وسوف تظهر في لوحة تحكم الإدارة فوراً!")
+                st.success("🎉 تم إرسال رسالتك بنجاح!")
 
-# لوحة الموجه لإنشاء الغرف وتخصيص الأعمار
+# لوحة الموجه وإصلاح مشكلة الدخول اللحظي السريع للمتسابق الثاني ⚡
 elif st.session_state.curr_page == "admin_mode":
     st.markdown(f"<h2 style='text-align:center; color:#0369A1;'>{lang_dict['create_room']}</h2>", unsafe_allow_html=True)
     if 'my_live_room' not in st.session_state:
         q_src = st.radio(lang_dict["q_src_label"], [lang_dict["q_src_kids"], lang_dict["q_src_adults"]])
-        
         chosen_age = None
         if q_src == lang_dict["q_src_kids"]:
             chosen_age = st.slider(lang_dict["age_label"], 6, 17, 10)
@@ -335,7 +319,7 @@ elif st.session_state.curr_page == "admin_mode":
         t_val = st.slider(lang_dict["time_q_label"], 5, 60, 30)
         
         if st.button(lang_dict["gen_room_btn"]):
-            with st.spinner("جاري الاتصال بـ Gemini لتوليد باقة أسئلة ذكية ومناسبة للعمر الفعلي... ⚡"):
+            with st.spinner("جاري صياغة الأسئلة اللحظية... ⚡"):
                 chosen_questions = generate_questions_via_gemini(q_src, q_topic, int(num_q), st.session_state.lang, chosen_age)
                 
             st.session_state.generated_room_code = str(random.randint(1000, 9999))
@@ -352,6 +336,11 @@ elif st.session_state.curr_page == "admin_mode":
         rid = st.session_state.my_live_room; rdata = db["rooms"].get(rid)
         if rdata:
             st.success(f"🎲 رقم الغرفة المباشرة: **{rid}**")
+            
+            # عرض عدد اللاعبين المشتركين فوراً وبدون أي تعليق
+            st.write(f"👥 المتسابقون المسجلون حالياً: {len(rdata['players'])}")
+            for p in rdata['players']: st.write(f"- 🎮 {p}")
+            
             if rdata["status"] == "waiting":
                 if st.button("🚀 إطلاق البث والمسابقة الحين"): 
                     db["rooms"][rid]["status"] = "playing"; db["rooms"][rid]["q_start_time"] = time.time(); st.rerun()
@@ -374,7 +363,55 @@ elif st.session_state.curr_page == "admin_mode":
                 if rid in db["rooms"]: del db["rooms"][rid]
                 del st.session_state.my_live_room; st.session_state.generated_room_code = None; st.rerun()
 
-# صفحة اختبر نفسك (ثقّف نفسك)
+# دخول كمتسابق - تحسين الدخول الفوري السريع ومنع التعليق ⚡
+elif st.session_state.curr_page == "player_mode":
+    if 'joined_live_room' not in st.session_state:
+        cc = st.text_input("أدخل رقم الغرفة المكون من 4 أرقام:", key="p_room_input")
+        cn = st.text_input("أدخل اسمك الكريم للمنافسة:", key="p_name_input")
+        if st.button("🚪 دخول الغرفة الحية"):
+            if cc in db["rooms"]: 
+                if cn not in db["rooms"][cc]["players"]:
+                    db["rooms"][cc]["players"].append(cn)
+                    db["rooms"][cc]["scores"][cn] = 0
+                st.session_state.joined_live_room = cc
+                st.session_state.my_joined_name = cn
+                st.success("🎉 تم تسجيل دخولك بنجاح!")
+                st.rerun()
+            else:
+                st.error("❌ عذراً، رقم الغرفة غير موجود حالياً!")
+    else:
+        rid = st.session_state.joined_live_room; pname = st.session_state.my_joined_name; rdata = db["rooms"].get(rid)
+        if rdata:
+            st.success(f"🎯 أنت الآن متصل بالغرفة رقم: {rid} | الاسم: {pname}")
+            if rdata["status"] == "waiting":
+                st.warning("⏳ بانتظار الموجه لإطلاق الأسئلة وبدء الجولة الحية...")
+                if st.button("🔄 تحديث حالة الغرفة"): st.rerun()
+            elif rdata["status"] == "playing":
+                qi = rdata["current_q_idx"]; ql = rdata["questions"]
+                if qi < len(ql):
+                    st.write(f"### ❓ السؤال {qi+1}: {ql[qi]['السؤال']}")
+                    c_ans = str(ql[qi]["الخيار 1 - الصحيح"])
+                    
+                    if f"sh_opts_{qi}" not in st.session_state:
+                        opts = [c_ans, str(ql[qi]["الخيار 2"]), str(ql[qi]["الخيار 3"]), str(ql[qi]["الخيار 4"])]
+                        random.shuffle(opts); st.session_state[f"sh_opts_{qi}"] = opts
+                        
+                    sel = st.radio("اختر الإجابة:", st.session_state[f"sh_opts_{qi}"], key=f"p_s_{qi}")
+                    rem = max(0, int(rdata["duration"] - (time.time() - rdata["q_start_time"])))
+                    st.warning(f"⏳ الوقت المتبقي: {rem} ثانية")
+                    
+                    if st.button("✔️ اعتماد الإجابة الآن", key=f"btn_sub_{qi}"):
+                        if sel == c_ans:
+                            st.success(lang_dict["correct_notify"])
+                            db["rooms"][rid]["scores"][pname] += 10
+                        else:
+                            st.error(lang_dict["wrong_notify"])
+                        time.sleep(1)
+                        st.rerun()
+            elif rdata["status"] == "finished":
+                st.info("🏆 انتهت المسابقة! شاهد النتيجة الكاملة عند الموجه.")
+
+# صفحة اختبر نفسك (ثقّف نفسك) - تم حل مشكلة تداخل وعلق الإجابات القديمة كلياً بقوة 💪
 elif st.session_state.curr_page == "culture_mode":
     st.markdown(f"<h2 style='text-align:center; color:#0369A1;'>🕹️ {lang_dict['test_yourself']}</h2>", unsafe_allow_html=True)
     
@@ -396,9 +433,11 @@ elif st.session_state.curr_page == "culture_mode":
             st.write(f"### ❓ السؤال {si+1}: {sq[si]['السؤال']}")
             corr = str(sq[si]["الخيار 1 - الصحيح"])
             
+            # معالجة وتوليد خيارات فريدة ومنفصلة لكل سؤال لإنهاء مشكلة التداخل الظاهرة في الصورة image_90667e.png
             if f"solo_opt_{si}" not in st.session_state:
                 opts = [corr, str(sq[si]["الخيار 2"]), str(sq[si]["الخيار 3"]), str(sq[si]["الخيار 4"])]
-                random.shuffle(opts); st.session_state[f"solo_opt_{si}"] = opts
+                random.shuffle(opts)
+                st.session_state[f"solo_opt_{si}"] = opts
                 
             user_sel = st.radio("اختر الإجابة الصحيحة:", st.session_state[f"solo_opt_{si}"], key=f"sl_r_{si}")
             
@@ -415,15 +454,12 @@ elif st.session_state.curr_page == "culture_mode":
         else:
             st.balloons()
             st.markdown(f"<div class='leaderboard-box'>🎉 انتهى التحدي الفردي بنجاح! رصيدك: {st.session_state.solo_score} نقطة!</div>", unsafe_allow_html=True)
-            if st.button("🔄 تحدي جديد"):
+            if st.button("🔄 تحدي جديد ومجال آخر"):
+                # تصفير وتنظيف شامل لكافة مخلفات الذاكرة القديمة لضمان عدم تداخل الإجابات نهائياً
+                for key in list(st.session_state.keys()):
+                    if key.startswith("solo_opt_") or key.startswith("sl_r_"):
+                        del st.session_state[key]
                 del st.session_state.solo_questions
                 st.rerun()
-
-# صفحة المتسابقين والتحاقهم بالغرفة
-elif st.session_state.curr_page == "player_mode":
-    cc = st.text_input("أدخل رقم الغرفة المكون من 4 أرقام:")
-    cn = st.text_input("أدخل اسمك الكريم للمنافسة:")
-    if st.button("🚪 دخول الغرفة الحية"):
-        st.info("جاري الاتصال والتحضير لدخول البث الحركي للمسابقة...")
 
 st.markdown(f"<div class='footer-text'>{lang_dict['footer']}</div>", unsafe_allow_html=True)
