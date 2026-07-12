@@ -302,27 +302,54 @@ elif st.session_state.curr_page == "player_mode":
         if rdata:
             st.markdown(f"<div style='background-color:#0EA5E9; color:white; padding:10px; border-radius:8px; text-align:center; font-size:1.1rem; font-weight:bold;'>أنت متصل الآن بالغرفة رقم: {rid} | المتسابق: {pname}</div>", unsafe_allow_html=True)
             
+            # --- إضافة زر الخروج من الغرفة بشكل فوري وواضح للمتسابق ---
+            if st.button("🚪 الخروج من الغرفة والإنسحاب", key="player_exit_btn"):
+                if pname in rdata["players"]:
+                    rdata["players"].remove(pname)
+                if pname in rdata["scores"]:
+                    del rdata["scores"][pname]
+                del st.session_state.joined_live_room
+                del st.session_state.my_joined_name
+                st.warning("تم خروجك من الغرفة وتحديث قائمة الموجه.")
+                st.rerun()
+            
+            st.write("---")
+            
             if rdata["status"] == "waiting":
                 st.info("⏳ خليك مستعد.. الموجه يجمع اللاعبين الحين وسيبدأ إطلاق الأسئلة فوراً!")
                 if st.button("🔄 تحديث وانتظار الإشارة", use_container_width=True): st.rerun()
             elif rdata["status"] == "playing":
                 qi = rdata["current_q_idx"]; ql = rdata["questions"]
-                if qi < len(ql):
-                    st.markdown(f"<div class='question-text'>❓ السؤال الحالي ({qi+1}): {ql[qi]['السؤال']}</div>", unsafe_allow_html=True)
-                    c_ans = str(ql[qi]["Gl_1"] if "Gl_1" in ql[qi] else ql[qi]["الخيار 1 - الصحيح"])
+                
+                # حفظ السؤال الحالي في الجلسة لمقارنته عند انتقال الموجه
+                if "player_last_viewed_qi" not in st.session_state:
+                    st.session_state.player_last_viewed_qi = qi
+                
+                # الشرط الذكي: إذا قام الموجه بالانتقال للسؤال التالي، يظهر للمتسابق زر للانتقال الفوري
+                if qi > st.session_state.player_last_viewed_qi:
+                    st.success("📢 الموجه انتقل للسؤال التالي الحين!")
+                    if st.button("➡️ إظهار السؤال التالي والجديد", key=f"go_next_sync_{qi}", use_container_width=True):
+                        st.session_state.player_last_viewed_qi = qi
+                        st.rerun()
+                
+                # عرض السؤال الحالي الذي يظهر بناء على رقم الفيو المعتمد للمتسابق
+                current_show_idx = st.session_state.player_last_viewed_qi
+                if current_show_idx < len(ql):
+                    st.markdown(f"<div class='question-text'>❓ السؤال الحالي ({current_show_idx+1}): {ql[current_show_idx]['السؤال']}</div>", unsafe_allow_html=True)
+                    c_ans = str(ql[current_show_idx]["Gl_1"] if "Gl_1" in ql[current_show_idx] else ql[current_show_idx]["الخيار 1 - الصحيح"])
                     
-                    if f"sh_opts_{qi}" not in st.session_state:
-                        opts = [c_ans, str(ql[qi]["الخيار 2"]), str(ql[qi]["الخيار 3"]), str(ql[qi]["الخيار 4"])]
-                        random.shuffle(opts); st.session_state[f"sh_opts_{qi}"] = opts
+                    if f"sh_opts_{current_show_idx}" not in st.session_state:
+                        opts = [c_ans, str(ql[current_show_idx]["الخيار 2"]), str(ql[current_show_idx]["الخيار 3"]), str(ql[current_show_idx]["الخيار 4"])]
+                        random.shuffle(opts); st.session_state[f"sh_opts_{current_show_idx}"] = opts
                         
                     st.markdown("<p style='color:#1E3A8A; font-weight:bold; font-size:1.15rem; margin-bottom:2px;'>اختر جوابك الصحيح بكل ثقة:</p>", unsafe_allow_html=True)
-                    sel = st.radio("", st.session_state[f"sh_opts_{qi}"], key=f"p_s_{qi}", label_visibility="collapsed")
+                    sel = st.radio("", st.session_state[f"sh_opts_{current_show_idx}"], key=f"p_s_{current_show_idx}", label_visibility="collapsed")
                     
                     rem = max(0, int(rdata["duration"] - (time.time() - rdata["q_start_time"])))
-                    st.markdown(f"<p style='color:#C2410C; font-weight:bold; font-size:1.2rem;'>⏳ الوقت المتبقي لديك: {rem} ثانية</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='color:#C2410C; font-weight:bold; font-size:1.2rem;'>⏳ الوقت المتبقي لدى الموجه: {rem} ثانية</p>", unsafe_allow_html=True)
                     
-                    if st.button("✔️ اعتماد الإجابة الآن", key=f"btn_sub_{qi}", use_container_width=True):
-                        rdata["player_answers"][f"{qi}_{pname}"] = sel
+                    if st.button("✔️ اعتماد الإجابة الآن", key=f"btn_sub_{current_show_idx}", use_container_width=True):
+                        rdata["player_answers"][f"{current_show_idx}_{pname}"] = sel
                         if sel == c_ans:
                             st.success("صح بطل كفو! إجابة ممتازة 🥳")
                             db["rooms"][rid]["scores"][pname] += 10
@@ -330,11 +357,15 @@ elif st.session_state.curr_page == "player_mode":
                             st.error("❌ للأسف إجابة خاطئة ركز في القادم!")
                         time.sleep(1.2)
                         st.rerun()
+                else:
+                    st.info("⏳ بانتظار إنهاء الجولة ورؤية النتائج النهائية من الموجه.")
+                    if st.button("🔄 تحديث ورؤية النتيجة النهائية", key="refresh_final_player"): st.rerun()
+                    
             elif rdata["status"] == "finished":
                 st.balloons()
                 st.success("🏆 انتهت جولة التحدي والمنافسة بنجاح! طالع شاشة الموجه لمعرفة الفائز الأول!")
 
-# صفحة اختبر نفسك الفردية (تم إصلاح المدخلات هنا لتطابق الدالة تماماً)
+# صفحة اختبر نفسك الفردية
 elif st.session_state.curr_page == "culture_mode":
     st.markdown("<h2 style='text-align:center; color:#0369A1;'>🕹️ تحدي اختبر نفسك الفردي (ثقّف نفسك)</h2>", unsafe_allow_html=True)
     
@@ -345,7 +376,6 @@ elif st.session_state.curr_page == "culture_mode":
         
         if st.button("🎯 ابدأ إطلاق وتوليد المسابقة فوراً", use_container_width=True):
             with st.spinner("جاري صياغة أسئلة مخصصة نادرة وغير مكررة أبداً... 🔥"):
-                # تعديل استدعاء الدالة ليتوافق مع التحديث الجديد ومنع الـ TypeError
                 st.session_state.solo_questions = generate_questions_via_gemini("Adults", solo_topic, int(solo_count), "ar")
                 st.session_state.solo_idx = 0
                 st.session_state.solo_score = 0
