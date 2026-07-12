@@ -97,21 +97,25 @@ if 'visitor_logged' not in st.session_state:
     save_local_data("total_v.json", db["total_visitors"])
     st.session_state.visitor_logged = True
 
-# دالة توليد الأسئلة من جيمني مع إلزامية عدم التكرار كلياً وتوليد مجالات متنوعة ونادرة
+# دالة توليد الأسئلة المحدثة والمعدلة لمنع اللخبطة والأسئلة الغريبة
 def generate_questions_via_gemini(category, topic, count, lang, age=None):
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # إجبار الموديل على إرجاع JSON نظيف تماماً ومطابق لتصنيف المادة
+        model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
         age_context = f"Target child exact age is {age} years old." if age else "Target group is adults."
+        
         prompt = f"""
         You are an elite professional quiz creator for Haya-Quiz.
-        Generate exactly {count} distinct and highly unique multiple-choice questions.
+        Generate exactly {count} distinct and highly unique multiple-choice questions in Arabic language.
         Target Group: '{category}'. {age_context}
-        Topic/Domain: '{topic}'.
-        Language: '{lang}'.
+        Strict Domain/Topic: '{topic}'.
         
-        CRITICAL RULE FOR VARIETY: Do NOT repeat questions from common or standard pools. Make them highly educational, creative, diverse, and never-before-seen.
+        CRITICAL RULES FOR ACCURACY:
+        1. If the Topic is 'إسلاميات', ALL questions must be strictly about Islamic culture, Quran, Seerah, or Fiqh. No science or general knowledge mixed in.
+        2. If the Topic is 'لغة عربية', ALL questions must be strictly about Arabic grammar, literature, poetry, or vocabulary.
+        3. Ensure the text is clear, meaningful, culturally appropriate for Saudi Arabia, and easily understandable.
         
-        Return response ONLY as a pure JSON array of objects, with no markdown formatting, no ```json tags.
+        Return response ONLY as a pure JSON array of objects. Do not wrap in ```json or markdown.
         Each object must have exactly these keys:
         - "السؤال": The question string.
         - "الخيار 1 - الصحيح": The correct answer string.
@@ -120,7 +124,7 @@ def generate_questions_via_gemini(category, topic, count, lang, age=None):
         - "الخيار 4": Wrong answer 3.
         """
         relative_resp = model.generate_content(prompt)
-        text_clean = relative_resp.text.strip().replace("```json", "").replace("```", "")
+        text_clean = relative_resp.text.strip()
         return json.loads(text_clean)
     except Exception as e:
         fallback_q = []
@@ -342,7 +346,7 @@ elif st.session_state.curr_page == "culture_mode":
         
         if st.button("🎯 ابدأ إطلاق وتوليد المسابقة فوراً", use_container_width=True):
             with st.spinner("جاري صياغة أسئلة مخصصة نادرة وغير مكررة أبداً... 🔥"):
-                st.session_state.solo_questions = generate_questions_via_gemini("Adults", solo_topic, int(solo_count), "ar")
+                st.session_state.solo_questions = generate_questions_via_gemini("Adults", solo_topic, int(solo_count))
                 st.session_state.solo_idx = 0
                 st.session_state.solo_score = 0
             st.rerun()
@@ -357,7 +361,7 @@ elif st.session_state.curr_page == "culture_mode":
                 random.shuffle(opts); st.session_state[f"solo_opt_{si}"] = opts
                 
             st.markdown("<p style='color:#1E3A8A; font-weight:bold; font-size:1.15rem; margin-bottom:2px;'>اختر الإجابة الصحيحة:</p>", unsafe_allow_html=True)
-            user_sel = st.radio("", st.session_state[f"sh_opts_{qi}" if 'qi' in locals() else f"solo_opt_{si}"], key=f"sl_r_{si}", label_visibility="collapsed")
+            user_sel = st.radio("", st.session_state[f"solo_opt_{si}"], key=f"sl_r_{si}", label_visibility="collapsed")
             
             if st.button("✔️ تأكيد واعتماد الإجابة", use_container_width=True):
                 if user_sel == corr:
@@ -409,8 +413,9 @@ with st.expander("⚙️ إعدادات لوحة الموجه (خاص بالمد
             st.rerun()
         st.write("---")
         col_m1, col_m2 = st.columns(2)
-        col_m1.metric(label="📊 المتواجدون حالياً", value="1 منشط")
-        col_m2.metric(label="📈 إجمالي الزيارات التاريخية التراكمية المحفوظة", value=f"{db['total_visitors']} زيارة")
+        st.metric(label="📊 المتواجدون حالياً", value="1 منشط")
+        db_visitors = db['total_visitors']
+        st.metric(label="📈 إجمالي الزيارات التاريخية التراكمية المحفوظة", value=f"{db_visitors} زيارة")
         
         st.write("---")
         st.markdown("#### 📥 صندوق الوارد لرسائل تواصل معنا")
