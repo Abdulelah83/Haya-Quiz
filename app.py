@@ -97,10 +97,9 @@ if 'visitor_logged' not in st.session_state:
     save_local_data("total_v.json", db["total_visitors"])
     st.session_state.visitor_logged = True
 
-# دالة توليد الأسئلة المحدثة والمعدلة لمنع اللخبطة والأسئلة الغريبة
-def generate_questions_via_gemini(category, topic, count, lang, age=None):
+# دالة توليد الأسئلة المحدثة والمحكومة بقالب الـ JSON
+def generate_questions_via_gemini(category, topic, count, lang="ar", age=None):
     try:
-        # إجبار الموديل على إرجاع JSON نظيف تماماً ومطابق لتصنيف المادة
         model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
         age_context = f"Target child exact age is {age} years old." if age else "Target group is adults."
         
@@ -335,7 +334,7 @@ elif st.session_state.curr_page == "player_mode":
                 st.balloons()
                 st.success("🏆 انتهت جولة التحدي والمنافسة بنجاح! طالع شاشة الموجه لمعرفة الفائز الأول!")
 
-# صفحة اختبر نفسك الفردية
+# صفحة اختبر نفسك الفردية (تم إصلاح المدخلات هنا لتطابق الدالة تماماً)
 elif st.session_state.curr_page == "culture_mode":
     st.markdown("<h2 style='text-align:center; color:#0369A1;'>🕹️ تحدي اختبر نفسك الفردي (ثقّف نفسك)</h2>", unsafe_allow_html=True)
     
@@ -346,7 +345,8 @@ elif st.session_state.curr_page == "culture_mode":
         
         if st.button("🎯 ابدأ إطلاق وتوليد المسابقة فوراً", use_container_width=True):
             with st.spinner("جاري صياغة أسئلة مخصصة نادرة وغير مكررة أبداً... 🔥"):
-                st.session_state.solo_questions = generate_questions_via_gemini("Adults", solo_topic, int(solo_count))
+                # تعديل استدعاء الدالة ليتوافق مع التحديث الجديد ومنع الـ TypeError
+                st.session_state.solo_questions = generate_questions_via_gemini("Adults", solo_topic, int(solo_count), "ar")
                 st.session_state.solo_idx = 0
                 st.session_state.solo_score = 0
             st.rerun()
