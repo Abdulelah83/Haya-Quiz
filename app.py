@@ -77,35 +77,34 @@ SHEET_ID = "1_Is0imnUnhiyqG49qlvBRdAdbGCADsoNjbdAG2ID7II"
 GOOGLE_SHEET_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
 # دالة جلب الأسئلة المباشرة واللحظية من قوقل شيت وتطهير البيانات
-@st.cache_data(ttl=5)  # تحديث الذاكرة كل 5 ثواني فقط ليعمل الريفلكت التلقائي والمباشر
+@st.cache_data(ttl=2)  # تقليل الكاش لثانيتين لضمان المزامنة الفورية عند التعديل في الشيت
 def load_questions_from_google_sheet():
     try:
         df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
-        # إزالة الفراغات من أسماء الأعمدة لتفادي الأخطاء التعبوية
         df.columns = df.columns.str.strip()
         return df
     except Exception as e:
-        st.error("⚠️ فشل الاتصال بجوجل شيت، تأكد من اتصال السيرفر بالإنترنت وبأن الرابط عام.")
         return pd.DataFrame()
 
-# تصفية وجلب باقة الأسئلة المطلوبة بناءً على الفئة والتصنيف والعمر من الشيت مباشرة دون تكرار
+# دالة فلترة الأسئلة الذكية والمرنة لحل مشكلة النقص في عدد الأسئلة للأطفال
 def fetch_custom_questions(df, category_filter, topic_filter, count, age_filter=None):
     if df.empty:
         return []
     
-    # فلترة الفئة (أطفال أو كبار)
-    filtered_df = df[df['الفئة'].str.strip() == category_filter]
+    # 1. التصفية حسب الفئة الأساسية والتصنيف المعتمد
+    filtered_df = df[(df['الفئة'].str.strip() == category_filter) & (df['التصنيف'].str.strip() == topic_filter)]
     
-    # فلترة التصنيف (إسلاميات، علوم، إلخ)
-    filtered_df = filtered_df[filtered_df['التصنيف'].str.strip() == topic_filter]
-    
-    # إذا كانت الفئة أطفال، نحاول المطابقة مع العمر المحدد على السلايدر
+    # 2. في حال فئة الأطفال، نطبق الفلترة المرنة للأعمار المتقاربة
     if category_filter == "أطفال" and age_filter:
-        age_filtered = filtered_df[filtered_df['العمر'].astype(str).str.strip() == str(age_filter)]
-        if not age_filtered.empty:
-            filtered_df = age_filtered
-            
-    # تحويل البيانات إلى القالب البرمجي لغرف المسابقات واختيار عينات عشوائية طازجة
+        exact_age_df = filtered_df[filtered_df['العمر'].astype(str).str.strip() == str(age_filter)]
+        
+        # إذا وجدنا أسئلة كافية تطابق العمر بالضبط نعتمدها
+        if len(exact_age_df) >= count:
+            filtered_df = exact_age_df
+        else:
+            # إذا كانت أقل، ندمج معها بقية أسئلة فئة الأطفال لنفس التصنيف لضمان اكتمال العدد المطلق (5 أسئلة مثلاً)
+            pass
+
     pool = []
     for _, row in filtered_df.iterrows():
         pool.append({
@@ -119,7 +118,6 @@ def fetch_custom_questions(df, category_filter, topic_filter, count, age_filter=
     if len(pool) == 0:
         return []
         
-    # خلط بنك الأسئلة المفلتر واختيار العدد المطلوب بدقة لمنع التكرار التلقائي في الجولة
     random.shuffle(pool)
     return pool[:min(count, len(pool))]
 
@@ -211,16 +209,14 @@ elif st.session_state.curr_page == "manual_setup_mode":
         else:
             st.error("الرجاء تعبئة الأسئلة والأجوبة الصحيحة أولاً قبل الحفظ!")
 
-# لوحة الموجه وإدارة الغرف الحية المربوطة بالشيت بالكامل
+# لوحة التحكم وإطلاق الغرف الحية
 elif st.session_state.curr_page == "admin_mode":
     st.markdown("<h2 style='text-align:center; color:#0369A1;'>🏆 لوحة التحكم وإطلاق الغرف الحية</h2>", unsafe_allow_html=True)
     
     if 'my_live_room' not in st.session_state:
         mode_select = st.radio("⚙️ اختر نظام جلب الأسئلة للجولة الحالية:", ["سحب تلقائي مباشر من جدول Google Sheets", "استدعاء مسابقة يدوية محفوظة برقم مميز"])
-        
         chosen_questions = []
         t_val = 30
-        
         live_q_weight = st.selectbox("🎯 اختر وزن/درجة كل سؤال في هذه الجولة الحية:", [5, 10, 15, 20], index=1)
         
         if mode_select == "سحب تلقائي مباشر من جدول Google Sheets":
@@ -259,13 +255,11 @@ elif st.session_state.curr_page == "admin_mode":
                 "scores": {}, "correct_counts": {}, "player_answers": {}, 
                 "q_weight": live_q_weight, "q_start_time": time.time()
             }
-            st.write(f"🎉 تم حجز الغرفة بنجاح وبانتظار المشتركين.")
             st.rerun()
     else:
         rid = st.session_state.my_live_room; rdata = db["rooms"].get(rid)
         if rdata:
             st.markdown(f"<div style='background-color:#0284C7; color:white; padding:15px; border-radius:12px; text-align:center; font-size:1.4rem;'>🎯 رقم الغرفة الحية للمشتركين الحين: <strong>{rid}</strong> | وزن السؤال: {rdata.get('q_weight', 10)} نقاط</div>", unsafe_allow_html=True)
-            
             st.write(f"👥 عدد المتسابقين المتصلين حالياً: {len(rdata['players'])}")
             
             if rdata["status"] == "waiting":
@@ -293,11 +287,9 @@ elif st.session_state.curr_page == "admin_mode":
                     db["rooms"][rid]["status"] = "finished"; st.rerun()
             elif rdata["status"] == "finished":
                 st.markdown("<h2 style='text-align:center; color:#0369A1;'>🏆 الداشبورد ولوحة الفائزين النهائية 🏆</h2>", unsafe_allow_html=True)
-                
                 total_q = len(rdata["questions"])
                 weight = rdata.get("q_weight", 10)
                 max_score = total_q * weight
-                
                 sorted_scores = sorted(rdata["scores"].items(), key=lambda x: x[1], reverse=True)
                 
                 for rank, (p, score) in enumerate(sorted_scores):
@@ -320,16 +312,13 @@ elif st.session_state.curr_page == "admin_mode":
 # دخول كمتسابق
 elif st.session_state.curr_page == "player_mode":
     st.markdown("<h2 style='text-align:center; color:#0369A1;'>🎮 ساحة المتسابقين ودخول المنافسة</h2>", unsafe_allow_html=True)
-    
     if 'joined_live_room' not in st.session_state:
         st.markdown("<label class='input-label'>🔢 أدخل رقم الغرفة المكون من 4 أرقام:</label>", unsafe_allow_html=True)
         cc = st.text_input("", key="p_room_input", label_visibility="collapsed")
-        
         st.markdown("<label class='input-label'>📝 أدخل اسمك الكريم للمنافسة الحية:</label>", unsafe_allow_html=True)
         cn = st.text_input("", key="p_name_input", label_visibility="collapsed")
         
-        col_p1, col_p2 = st.columns([2, 1])
-        if col_p1.button("🚪 دخول الغرفة واعتماد اسمي الحين", use_container_width=True):
+        if st.button("🚪 دخول الغرفة واعتماد اسمي الحين", use_container_width=True):
             if cc in db["rooms"]: 
                 if cn not in db["rooms"][cc]["players"]:
                     db["rooms"][cc]["players"].append(cn)
@@ -341,12 +330,8 @@ elif st.session_state.curr_page == "player_mode":
                 st.rerun()
             else:
                 st.error("❌ عذراً، رقم الغرفة غير موجود حالياً أو أغلقت!")
-        if col_p2.button("🔙 العودة للرئيسية", use_container_width=True):
-            st.session_state.curr_page = "home"
-            st.rerun()
     else:
         rid = st.session_state.joined_live_room; pname = st.session_state.my_joined_name; rdata = db["rooms"].get(rid)
-        
         if not rdata or pname not in rdata.get("players", []):
             st.warning("⚠️ تم إغلاق الغرفة أو الخروج منها.")
             if st.button("🔄 العودة لصفحة الدخول"):
@@ -354,26 +339,18 @@ elif st.session_state.curr_page == "player_mode":
                 st.rerun()
         else:
             st.markdown(f"<div style='background-color:#0EA5E9; color:white; padding:10px; border-radius:8px; text-align:center; font-size:1.1rem; font-weight:bold;'>أنت متصل الآن بالغرفة رقم: {rid} | المتسابق: {pname}</div>", unsafe_allow_html=True)
-            
             if st.button("🔴 الخروج والإنسحاب من المسابقة", key="player_exit_btn", use_container_width=True):
                 if pname in rdata["players"]: rdata["players"].remove(pname)
                 if pname in rdata["scores"]: del rdata["scores"][pname]
-                del st.session_state.joined_live_room
-                del st.session_state.my_joined_name
-                st.rerun()
+                del st.session_state.joined_live_room; del st.session_state.my_joined_name; st.rerun()
             
             st.write("---")
-            
             if rdata["status"] == "waiting":
                 st.info("⏳ خليك مستعد.. الموجه يجمع اللاعبين الحين وسيبدأ إطلاق الأسئلة فوراً!")
                 if st.button("🔄 تحديث وانتظار الإشارة", use_container_width=True): st.rerun()
-            
             elif rdata["status"] == "playing":
                 qi = rdata["current_q_idx"]; ql = rdata["questions"]
-                
-                if "p_last_q" not in st.session_state:
-                    st.session_state.p_last_q = qi
-                
+                if "p_last_q" not in st.session_state: st.session_state.p_last_q = qi
                 if qi != st.session_state.p_last_q:
                     st.session_state.p_last_q = qi
                     st.rerun()
@@ -381,7 +358,6 @@ elif st.session_state.curr_page == "player_mode":
                 if qi < len(ql):
                     st.markdown(f"<div class='question-text'>❓ السؤال الحالي ({qi+1}/{len(ql)}): {ql[qi]['السؤال']}</div>", unsafe_allow_html=True)
                     c_ans = str(ql[qi]["الخيار 1 - الصحيح"])
-                    
                     if f"sh_opts_{qi}" not in st.session_state:
                         opts = [c_ans, str(ql[qi]["الخيار 2"]), str(ql[qi]["الخيار 3"]), str(ql[qi]["الخيار 4"])]
                         random.shuffle(opts)
@@ -403,37 +379,23 @@ elif st.session_state.curr_page == "player_mode":
                             st.rerun()
                     else:
                         chosen_val = rdata["player_answers"][ans_key]
-                        if chosen_val == c_ans:
-                            st.success("🎉 إجابة صحيحة وكفو! ممتاز جداً!")
-                        else:
-                            st.error(f"❌ إجابة خاطئة! الإجابة الصحيحة هي: **{c_ans}**")
-                        
-                        st.info("👍 تم اعتماد إجابتك بنجاح! انتظر انتقال الموجه للسؤال التالي.")
-                        if st.button("⚡ جاهز للسؤال التالي (تحديث الشاشة)", key=f"sync_next_{qi}", use_container_width=True):
-                            st.rerun()
+                        if chosen_val == c_ans: st.success("🎉 إجابة صحيحة وكفو! ممتاز جداً!")
+                        else: st.error(f"❌ إجابة خاطئة! الإجابة الصحيحة هي: **{c_ans}**")
+                        if st.button("⚡ جاهز للسؤال التالي (تحديث الشاشة)", key=f"sync_next_{qi}", use_container_width=True): st.rerun()
                 else:
                     st.info("⏳ بانتظار إعلان النتائج النهائية من الموجه.")
                     if st.button("🔄 تحديث ورؤية النتيجة النهائية", key="refresh_final_player"): st.rerun()
-                    
             elif rdata["status"] == "finished":
                 st.balloons()
-                total_q = len(rdata["questions"])
-                weight = rdata.get("q_weight", 10)
-                max_score = total_q * weight
-                my_score = rdata["scores"].get(pname, 0)
-                corrects = rdata.get("correct_counts", {}).get(pname, 0)
-                wrongs = total_q - corrects
+                total_q = len(rdata["questions"]); weight = rdata.get("q_weight", 10); max_score = total_q * weight
+                my_score = rdata["scores"].get(pname, 0); corrects = rdata.get("correct_counts", {}).get(pname, 0); wrongs = total_q - corrects
                 pct = round((my_score / max_score) * 100) if max_score > 0 else 0
                 
                 st.markdown("<h2 style='text-align:center; color:#0369A1;'>📊 داشبورد ونتيجتك النهائية</h2>", unsafe_allow_html=True)
-                
                 col_p1, col_p2, col_p3 = st.columns(3)
-                with col_p1:
-                    st.markdown(f"<div class='dashboard-card'><h3 style='color:#0284C7;'>🎯 مجموع النقاط</h3><h1 style='color:#0369A1;'>{my_score} / {max_score}</h1><p>النسبة: {pct}%</p></div>", unsafe_allow_html=True)
-                with col_p2:
-                    st.markdown(f"<div class='dashboard-card'><h3 style='color:#16A34A;'>✅ الصحيحة</h3><h1 style='color:#15803D;'>{corrects}</h1><p>من {total_q} سؤال</p></div>", unsafe_allow_html=True)
-                with col_p3:
-                    st.markdown(f"<div class='dashboard-card'><h3 style='color:#DC2626;'>❌ الخاطئة</h3><h1 style='color:#B91C1C;'>{wrongs}</h1><p>أسئلة لم توفق بها</p></div>", unsafe_allow_html=True)
+                with col_p1: st.markdown(f"<div class='dashboard-card'><h3>🎯 مجموع النقاط</h3><h1>{my_score} / {max_score}</h1><p>النسبة: {pct}%</p></div>", unsafe_allow_html=True)
+                with col_p2: st.markdown(f"<div class='dashboard-card'><h3>✅ الصحيحة</h3><h1>{corrects}</h1><p>من {total_q} سؤال</p></div>", unsafe_allow_html=True)
+                with col_p3: st.markdown(f"<div class='dashboard-card'><h3>❌ الخاطئة</h3><h1>{wrongs}</h1><p>أسئلة لم توفق بها</p></div>", unsafe_allow_html=True)
 
 # صفحة اختبر نفسك الفردية (ثقف نفسك بسحب مباشر وحقيقي من جوجل شيت)
 elif st.session_state.curr_page == "culture_mode":
@@ -441,7 +403,6 @@ elif st.session_state.curr_page == "culture_mode":
     
     if 'solo_questions' not in st.session_state:
         st.write("### ⚙️ اختر إعدادات تحديك الفوري المخصص:")
-        
         solo_target = st.radio("اختر الفئة المستهدفة للتحدي:", ["قسم الأطفال والأبناء 👶", "قسم الكبار والشباب 🧔"])
         solo_age = None
         if solo_target == "قسم الأطفال والأبناء 👶":
@@ -449,7 +410,6 @@ elif st.session_state.curr_page == "culture_mode":
             
         solo_topic = st.selectbox("اختر المجال أو الفئة السحابية:", ["إسلاميات", "لغة عربية", "علوم", "رياضيات", "اجتماعيات", "طبيعة وجغرافيا", "ثقافة عامة"])
         solo_count = st.slider("حدد عدد الأسئلة المطلوبة في هذه الجولة:", 1, 20, 5)
-        
         q_weight = st.selectbox("🎯 اختر وزن/درجة كل سؤال في هذه الجولة:", [5, 10, 15, 20], index=1)
         
         if st.button("🎯 ابدأ التحدي الفوري من بنك جوجل شيت", use_container_width=True):
@@ -464,7 +424,7 @@ elif st.session_state.curr_page == "culture_mode":
                 st.session_state.q_weight = q_weight
                 st.rerun()
             else:
-                st.error(f"⚠️ لم يعثر النظام على أسئلة تطابق الخيارات المحددة في الشيت حالياً. تذكر أنك تمتلك لوحة إدارة لمراقبة أعداد الأسئلة بالأسفل!")
+                st.error(f"⚠️ لم يعثر النظام على أسئلة كافية تطابق الخيارات المحددة في الشيت حالياً. يرجى إضافة الأسئلة في الشيت لتظهر هنا فوراً!")
     else:
         sq = st.session_state.solo_questions; si = st.session_state.solo_idx
         weight = st.session_state.get('q_weight', 10)
@@ -472,7 +432,6 @@ elif st.session_state.curr_page == "culture_mode":
         if si < len(sq):
             st.markdown(f"<div class='question-text'>❓ السؤال ({si+1}/{len(sq)}): {sq[si]['السؤال']}</div>", unsafe_allow_html=True)
             corr = str(sq[si]["الخيار 1 - الصحيح"])
-            
             if f"solo_opt_{si}" not in st.session_state:
                 opts = [corr, str(sq[si]["الخيار 2"]), str(sq[si]["الخيار 3"]), str(sq[si]["الخيار 4"])]
                 random.shuffle(opts)
@@ -493,29 +452,19 @@ elif st.session_state.curr_page == "culture_mode":
                 st.rerun()
         else:
             st.balloons()
-            total_q = len(sq)
-            correct_cnt = st.session_state.solo_correct_cnt
-            wrong_cnt = st.session_state.solo_wrong_cnt
-            
-            earned_score = correct_cnt * weight
-            max_score = total_q * weight
-            percentage = round((earned_score / max_score) * 100) if max_score > 0 else 0
+            total_q = len(sq); correct_cnt = st.session_state.solo_correct_cnt; wrong_cnt = st.session_state.solo_wrong_cnt
+            earned_score = correct_cnt * weight; max_score = total_q * weight; percentage = round((earned_score / max_score) * 100) if max_score > 0 else 0
             
             st.markdown("<h2 style='text-align:center; color:#0369A1;'>📊 لوحة النتائج والداشبورد النهائي</h2>", unsafe_allow_html=True)
-            
             col_d1, col_d2, col_d3 = st.columns(3)
-            with col_d1:
-                st.markdown(f"<div class='dashboard-card'><h3 style='color:#0284C7;'>🎯 الدرجة الكلية</h3><h1 style='color:#0369A1; font-size:2.5rem;'>{earned_score} / {max_score}</h1><p>النسبة المئوية: {percentage}%</p></div>", unsafe_allow_html=True)
-            with col_d2:
-                st.markdown(f"<div class='dashboard-card'><h3 style='color:#16A34A;'>✅ الإجابات الصحيحة</h3><h1 style='color:#15803D; font-size:2.5rem;'>{correct_cnt}</h1><p>من إجمالي {total_q} سؤال</p></div>", unsafe_allow_html=True)
-            with col_d3:
-                st.markdown(f"<div class='dashboard-card'><h3 style='color:#DC2626;'>❌ الإجابات الخاطئة</h3><h1 style='color:#B91C1C; font-size:2.5rem;'>{wrong_cnt}</h1><p>أسئلة تحتاج لمراجعة</p></div>", unsafe_allow_html=True)
+            with col_d1: st.markdown(f"<div class='dashboard-card'><h3>🎯 الدرجة الكلية</h3><h1>{earned_score} / {max_score}</h1><p>النسبة المئوية: {percentage}%</p></div>", unsafe_allow_html=True)
+            with col_d2: st.markdown(f"<div class='dashboard-card'><h3>✅ الصحيحة</h3><h1>{correct_cnt}</h1><p>من إجمالي {total_q} سؤال</p></div>", unsafe_allow_html=True)
+            with col_d3: st.markdown(f"<div class='dashboard-card'><h3>❌ الخاطئة</h3><h1>{wrong_cnt}</h1><p>أسئلة تحتاج لمراجعة</p></div>", unsafe_allow_html=True)
                 
-            if st.button("🔄 جولة تحدي جديدة بمجال آخر", use_container_width=True):
+            if st.button("🔄 بدء جولة تحدي جديدة بمجال آخر", use_container_width=True):
                 for key in list(st.session_state.keys()):
                     if key.startswith("solo_opt_") or key.startswith("sl_r_"): del st.session_state[key]
-                del st.session_state.solo_questions
-                st.rerun()
+                del st.session_state.solo_questions; st.rerun()
 
 # تواصل معنا
 elif st.session_state.curr_page == "contact_mode":
@@ -549,31 +498,23 @@ with st.expander("⚙️ لوحة الموجه والتحليلات المتقد
         st.write("---")
         
         st.markdown("<h3 style='color:#0284C7;'>📊 لوحة رصد وإحصائيات الأسئلة التزامنية التلقائية (من جوجل شيت)</h3>", unsafe_allow_html=True)
-        
         if not sheet_data.empty:
             total_questions_in_sheet = len(sheet_data)
-            
-            # فلترة وحساب التصنيفات والفئات برمجياً
             kids_q_count = len(sheet_data[sheet_data['الفئة'].str.strip() == 'أطفال'])
             adults_q_count = len(sheet_data[sheet_data['الفئة'].str.strip() == 'كبار'])
             
             col_st1, col_st2, col_st3 = st.columns(3)
-            with col_st1:
-                st.metric(label="📈 العدد الكلي للأسئلة المكتشفة في الشيت حالياً", value=f"{total_questions_in_sheet} سؤال")
-            with col_st2:
-                st.metric(label="👶 إجمالي أسئلة قسم الأطفال والأبناء", value=f"{kids_q_count} سؤال")
-            with col_st3:
-                st.metric(label="🧔 إجمالي أسئلة قسم الشباب والكبار", value=f"{adults_q_count} سؤال")
+            with col_st1: st.metric(label="📈 العدد الكلي للأسئلة المكتشفة في الشيت حالياً", value=f"{total_questions_in_sheet} سؤال")
+            with col_st2: st.metric(label="👶 إجمالي أسئلة قسم الأطفال والأبناء", value=f"{kids_q_count} سؤال")
+            with col_st3: st.metric(label="🧔 إجمالي أسئلة قسم الشباب والكبار", value=f"{adults_q_count} سؤال")
                 
             st.markdown("#### 📁 أعداد توزيع الأسئلة الحالية بالتفصيل حسب التصنيفات:")
             topics_list = ["إسلاميات", "لغة عربية", "علوم", "رياضيات", "اجتماعيات", "طبيعة وجغرافيا", "ثقافة عامة"]
             col_t1, col_t2, col_t3, col_t4 = st.columns(4)
             cols_cycle = [col_t1, col_t2, col_t3, col_t4]
-            
             for i, t_name in enumerate(topics_list):
                 count_t = len(sheet_data[sheet_data['التصنيف'].str.strip() == t_name])
-                with cols_cycle[i % 4]:
-                    st.write(f"- **{t_name}:** {count_t} سؤال")
+                with cols_cycle[i % 4]: st.write(f"- **{t_name}:** {count_t} سؤال")
         else:
             st.info("لم يتم جلب أي بيانات أسئلة بعد، يرجى ملء جدول جوجل شيت بالبيانات.")
 
@@ -582,18 +523,5 @@ with st.expander("⚙️ لوحة الموجه والتحليلات المتقد
         st.metric(label="📊 المتواجدون حالياً", value="1 منشط")
         db_visitors = db['total_visitors']
         st.metric(label="📈 إجمالي الزيارات التاريخية التراكمية المحفوظة", value=f"{db_visitors} زيارة")
-        
-        st.write("---")
-        st.markdown("#### 📥 صندوق الوارد لرسائل تواصل معنا")
-        if len(db["messages"]) == 0: st.info("لا توجد رسائل واردة حالياً.")
-        else:
-            for idx, msg in enumerate(db["messages"]):
-                with st.expander(f"✉️ من: {msg.get('name', 'مجهول')}"):
-                    st.write(f"**الجوال:** {msg.get('phone', 'غير متوفر')}")
-                    st.write(f"**الرسالة:** {msg.get('msg', '')}")
-                    if st.button("🗑️ حذف الرسالة", key=f"del_main_{idx}"):
-                        db["messages"].pop(idx)
-                        save_local_data("messages.json", db["messages"])
-                        st.rerun()
 
 st.markdown("<div class='footer-text'>تطوير عبد الإله العنزي | Developed by Abdulelah Al-Enazi</div>", unsafe_allow_html=True)
