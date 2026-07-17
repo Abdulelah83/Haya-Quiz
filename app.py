@@ -14,7 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# إجبار المتصفح وسفاري على إلغاء القائمة الجانبية تماماً لتنظيف الشاشة من الخط العمودي
+# إجبار المتصفح وسفاري على إلغاء القائمة الجانبية تماماً لتنظيف الشاشة
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { display: none !important; }
@@ -31,7 +31,7 @@ st.markdown("""
         font-size: 1.6rem !important;
         font-weight: 900 !important;
         background-color: #FFFFFF;
-        padding: 15px;
+        padding: 18px;
         border-radius: 12px;
         border-right: 6px solid #0284C7;
         margin: 15px 0;
@@ -106,46 +106,60 @@ if 'visitor_logged' not in st.session_state:
     save_local_data("total_v.json", db["total_visitors"])
     st.session_state.visitor_logged = True
 
-# دالة توليد الأسئلة المحدثة والمنقحة عبر جيمني AI
+# دالة توليد الأسئلة المحدثة بقواعد لغوية صارمة ومفهومة 100%
 def generate_questions_via_gemini(category, topic, count, lang="ar", age=None):
     try:
         model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
-        age_context = f"Target group: Children aged exactly {age} years old. Use highly accessible, crystal clear, encouraging, and clear language suitable for {age} years old." if age else "Target group: Adults and youth. Use clear, educational, and engaging language."
+        
+        target_desc = f"الأطفال بعمر {age} سنوات" if age else "الكبار والشباب"
         
         prompt = f"""
-        You are an expert educational content creator for Haya-Quiz platform in Saudi Arabia.
-        Generate exactly {count} clear, unambiguous, and high-quality multiple-choice questions in modern standard Arabic.
-        
-        Category Context: '{category}'. {age_context}
-        Required Topic: '{topic}'.
-        
-        RULES FOR ACCURACY & CLARITY:
-        1. Keep both questions and options concise, direct, and grammatically flawless.
-        2. Ensure there is ONLY ONE undeniably correct answer.
-        3. If Topic is 'إسلاميات', restrict strictly to sound Islamic facts (Quran, Seerah, Pillars of Islam).
-        4. No confusing riddles or overly complex phrasing.
-        
-        Return STRICTLY a valid JSON array of objects with these exact keys:
-        - "السؤال": Question text
-        - "الخيار 1 - الصحيح": The correct answer
-        - "الخيار 2": Wrong option 1
-        - "الخيار 3": Wrong option 2
-        - "الخيار 4": Wrong option 3
+        أنت خبير محترف ومصمم مسابقات ثقيفية وتعليمية باللغة العربية.
+        المطلوب: إنشاء {count} أسئلة اختيار من متعدد في مجال ({topic}) مخصصة لفئة ({target_desc}).
+
+        قواعد صارمة جداً وواجبة التطبيق:
+        1. يجب أن يكون نص السؤال باللغة العربية الفصحى المبسطة والواضحة جداً والمفهومة بدون أي غموض أو تعقيد.
+        2. الإجابة الصحيحة الخيار 1 يجب أن تكون مؤكدة وصحيحة 100% ولا تحتمل الشك.
+        3. الخيارات الأخرى (2 و 3 و 4) يجب أن تكون خاطئة تماماً وواضحة ومناسبة للموضوع.
+        4. إذا كان المجال 'إسلاميات': اقتصر على المعلومات الإسلامية الصحيحة والمعروفة (السيرة، القرآن، أركان الإسلام).
+        5. يمنع منعاً باتاً استخدام الترجمات الحرفية الركيكة أو المصطلحات الغريبة.
+
+        قم بإرجاع النتيجة على شكل مصفوفة JSON فقط تحتوي على كائنات بها المفاتيح التالية حصراً:
+        - "السؤال": نص السؤال المباشر الواضح.
+        - "الخيار 1 - الصحيح": الإجابة الصحيحة المؤكدة.
+        - "الخيار 2": إجابة خاطئة أولى.
+        - "الخيار 3": إجابة خاطئة ثانية.
+        - "الخيار 4": إجابة خاطئة ثالثة.
         """
+        
         relative_resp = model.generate_content(prompt)
         text_clean = relative_resp.text.strip()
-        return json.loads(text_clean)
+        parsed_data = json.loads(text_clean)
+        
+        # التأكد من صحة المفاتيح
+        valid_questions = []
+        for q in parsed_data:
+            if "السؤال" in q and "الخيار 1 - الصحيح" in q:
+                valid_questions.append(q)
+                
+        if len(valid_questions) > 0:
+            return valid_questions
+            
     except Exception as e:
-        fallback_q = []
-        for i in range(count):
-            fallback_q.append({
-                "السؤال": f"سؤال ممتاز رقم {i+1} في مجال {topic}",
-                "الخيار 1 - الصحيح": "الجواب الصحيح المعتمد",
-                "الخيار 2": "خيار بديل أ", "الخيار 3": "خيار بديل ب", "الخيار 4": "خيار بديل ج"
-            })
-        return fallback_q
+        pass
 
-# هيدر التنقل العلوي المتناسق
+    # احتياطي عربي عالي الجودة ومفهوم 100% في حال حدوث أي انقطاع بالذكاء الاصطناعي
+    fallback_pool = [
+        {"السؤال": "ما هو كم عدد أركان الإسلام؟", "الخيار 1 - الصحيح": "5 أركان", "الخيار 2": "3 أركان", "الخيار 3": "6 أركان", "الخيار 4": "4 أركان"},
+        {"السؤال": "ما هي عاصمة المملكة العربية السعودية؟", "الخيار 1 - الصحيح": "الرياض", "الخيار 2": "جدة", "الخيار 3": "الدمام", "الخيار 4": "مكة المكرمة"},
+        {"السؤال": "كم عدد سور القرآن الكريم؟", "الخيار 1 - الصحيح": "114 سورة", "الخيار 2": "100 سورة", "الخيار 3": "120 سورة", "الخيار 4": "110 سور"},
+        {"السؤال": "ما هو لسان القرآن الكريم ولغته؟", "الخيار 1 - الصحيح": "اللغة العربية", "الخيار 2": "اللغة الإنجليزية", "الخيار 3": "اللغة الفارسية", "الخيار 4": "اللغة الأوردية"},
+        {"السؤال": "ما هو أكبر كوكب في المجموعة الشمسية؟", "الخيار 1 - الصحيح": "كوكب المشتري", "الخيار 2": "كوكب الأرض", "الخيار 3": "كوكب المريخ", "الخيار 4": "كوكب زحل"}
+    ]
+    random.shuffle(fallback_pool)
+    return fallback_pool[:count]
+
+# هيدر التنقل العلوي
 col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 1, 1, 1])
 if col_nav1.button("🏠 الرئيسية", use_container_width=True): st.session_state.curr_page = "home"; st.rerun()
 if col_nav2.button("📞 تواصل معنا", use_container_width=True): st.session_state.curr_page = "contact_mode"; st.rerun()
@@ -203,7 +217,7 @@ elif st.session_state.curr_page == "manual_setup_mode":
         else:
             st.error("الرجاء تعبئة الأسئلة والأجوبة الصحيحة أولاً قبل الحفظ!")
 
-# لوحة الموجه وإدارة الغرف
+# لوحة الموجه وإدارة الغرف الحية
 elif st.session_state.curr_page == "admin_mode":
     st.markdown("<h2 style='text-align:center; color:#0369A1;'>🏆 لوحة التحكم وإطلاق الغرف الحية</h2>", unsafe_allow_html=True)
     
@@ -212,6 +226,9 @@ elif st.session_state.curr_page == "admin_mode":
         
         chosen_questions = []
         t_val = 30
+        
+        # اختيار وزن ودرجة السؤال للمسابقة الحية
+        live_q_weight = st.selectbox("🎯 اختر وزن/درجة كل سؤال في هذه الجولة الحية:", [5, 10, 15, 20], index=1)
         
         if mode_select == "توليد تلقائي ذكي عبر جيمني AI":
             q_src = st.radio("اختر الفئة المستهدفة:", ["قسم الأطفال والأبناء 👶", "قسم الكبار والشباب 🧔"])
@@ -223,7 +240,7 @@ elif st.session_state.curr_page == "admin_mode":
             t_val = st.slider("الوقت المتاح لكل سؤال (ثواني):", 5, 60, 30)
             
             if st.button("🎲 إنشاء غرفتك عبر الذكاء الاصطناعي", use_container_width=True):
-                with st.spinner("جاري صياغة أسئلة منوعة ونادرة لا تتكرر أبداً عبر جيمني... ⚡"):
+                with st.spinner("جاري صياغة أسئلة عربية واضحة ومفهومة 100% عبر جيمني... ⚡"):
                     chosen_questions = generate_questions_via_gemini(q_src, q_topic, int(num_q), "ar", chosen_age)
         else:
             input_pool_id = st.text_input("📝 أدخل رقم المسابقة المميز الذي قمت بحفظه مسبقاً:")
@@ -243,13 +260,14 @@ elif st.session_state.curr_page == "admin_mode":
             db["rooms"][rcode] = {
                 "players": [], "status": "waiting", "current_q_idx": 0, 
                 "questions": chosen_questions, "duration": t_val, 
-                "scores": {}, "player_answers": {}, "q_start_time": time.time()
+                "scores": {}, "correct_counts": {}, "player_answers": {}, 
+                "q_weight": live_q_weight, "q_start_time": time.time()
             }
             st.rerun()
     else:
         rid = st.session_state.my_live_room; rdata = db["rooms"].get(rid)
         if rdata:
-            st.markdown(f"<div style='background-color:#0284C7; color:white; padding:15px; border-radius:12px; text-align:center; font-size:1.4rem;'>🎯 رقم الغرفة الحية للمشتركين الحين: <strong>{rid}</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='background-color:#0284C7; color:white; padding:15px; border-radius:12px; text-align:center; font-size:1.4rem;'>🎯 رقم الغرفة الحية للمشتركين الحين: <strong>{rid}</strong> | وزن السؤال: {rdata.get('q_weight', 10)} نقاط</div>", unsafe_allow_html=True)
             
             st.write(f"👥 عدد المتسابقين المتصلين حالياً: {len(rdata['players'])}")
             
@@ -270,7 +288,6 @@ elif st.session_state.curr_page == "admin_mode":
                     rem = max(0, int(rdata["duration"] - (time.time() - rdata["q_start_time"])))
                     st.warning(f"⏱️ العداد التنازلي المباشر: {rem} ثانية")
                     
-                    # زر الانتقال الفوري للسؤال التالي من قبل الموجه
                     if st.button("⏩ الانتقال للسؤال التالي فوراً", use_container_width=True):
                         db["rooms"][rid]["current_q_idx"] += 1
                         db["rooms"][rid]["q_start_time"] = time.time()
@@ -278,10 +295,26 @@ elif st.session_state.curr_page == "admin_mode":
                 else: 
                     db["rooms"][rid]["status"] = "finished"; st.rerun()
             elif rdata["status"] == "finished":
-                st.markdown("<h3 style='text-align:center; color:#0369A1;'>🏆 لوحة الفائزين النهائية 🏆</h3>", unsafe_allow_html=True)
+                st.markdown("<h2 style='text-align:center; color:#0369A1;'>🏆 الداشبورد ولوحة الفائزين النهائية 🏆</h2>", unsafe_allow_html=True)
+                
+                total_q = len(rdata["questions"])
+                weight = rdata.get("q_weight", 10)
+                max_score = total_q * weight
+                
                 sorted_scores = sorted(rdata["scores"].items(), key=lambda x: x[1], reverse=True)
-                for rank, (p, s) in enumerate(sorted_scores):
-                    st.write(f"### 🏅 المركز {rank+1}: **{p}** -> برصيد {s} نقطة كاملة!")
+                
+                for rank, (p, score) in enumerate(sorted_scores):
+                    corrects = rdata.get("correct_counts", {}).get(p, 0)
+                    wrongs = total_q - corrects
+                    pct = round((score / max_score) * 100) if max_score > 0 else 0
+                    
+                    st.markdown(f"""
+                    <div class='dashboard-card'>
+                        <h3 style='color:#0284C7;'>🏅 المركز {rank+1}: {p}</h3>
+                        <h2 style='color:#0369A1;'>النتيجة: {score} / {max_score} نقطة ({pct}%)</h2>
+                        <p style='color:#15803D;'>✅ الإجابات الصحيحة: {corrects} | ❌ الخاطئة: {wrongs}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
             if st.button("🛑 إنهاء هذه الجولة وإغلاق الغرفة بالكامل", use_container_width=True):
                 if rid in db["rooms"]: del db["rooms"][rid]
@@ -304,6 +337,7 @@ elif st.session_state.curr_page == "player_mode":
                 if cn not in db["rooms"][cc]["players"]:
                     db["rooms"][cc]["players"].append(cn)
                     db["rooms"][cc]["scores"][cn] = 0
+                    db["rooms"][cc]["correct_counts"][cn] = 0
                 st.session_state.joined_live_room = cc
                 st.session_state.my_joined_name = cn
                 st.success("🎉 تم اتصالك ودخولك بنجاح للغرفة الحية!")
@@ -324,7 +358,6 @@ elif st.session_state.curr_page == "player_mode":
         else:
             st.markdown(f"<div style='background-color:#0EA5E9; color:white; padding:10px; border-radius:8px; text-align:center; font-size:1.1rem; font-weight:bold;'>أنت متصل الآن بالغرفة رقم: {rid} | المتسابق: {pname}</div>", unsafe_allow_html=True)
             
-            # --- زر الخروج من المسابقة أثناء الانتظار أو اللعب ---
             if st.button("🔴 الخروج والإنسحاب من المسابقة", key="player_exit_btn", use_container_width=True):
                 if pname in rdata["players"]: rdata["players"].remove(pname)
                 if pname in rdata["scores"]: del rdata["scores"][pname]
@@ -341,11 +374,9 @@ elif st.session_state.curr_page == "player_mode":
             elif rdata["status"] == "playing":
                 qi = rdata["current_q_idx"]; ql = rdata["questions"]
                 
-                # تتبع السؤال للتحقق من انتقال الموجه للسؤال التالي
                 if "p_last_q" not in st.session_state:
                     st.session_state.p_last_q = qi
                 
-                # إذا قام الموجه بالانتقال لسؤال جديد، يتم توجيه المتسابق فوراً
                 if qi != st.session_state.p_last_q:
                     st.session_state.p_last_q = qi
                     st.rerun()
@@ -368,8 +399,10 @@ elif st.session_state.curr_page == "player_mode":
                     if not has_answered:
                         if st.button("✔️ اعتماد الإجابة الآن", key=f"btn_sub_{qi}", use_container_width=True):
                             rdata["player_answers"][ans_key] = sel
+                            weight = rdata.get("q_weight", 10)
                             if sel == c_ans:
-                                db["rooms"][rid]["scores"][pname] += 10
+                                db["rooms"][rid]["scores"][pname] += weight
+                                db["rooms"][rid]["correct_counts"][pname] += 1
                             st.rerun()
                     else:
                         chosen_val = rdata["player_answers"][ans_key]
@@ -379,8 +412,6 @@ elif st.session_state.curr_page == "player_mode":
                             st.error(f"❌ إجابة خاطئة! الإجابة الصحيحة هي: **{c_ans}**")
                         
                         st.info("👍 تم اعتماد إجابتك بنجاح! انتظر انتقال الموجه للسؤال التالي.")
-                        
-                        # زر السحبي الفوري لتحديث الصفحة وإظهار السؤال التالي فور انتقال الموجه
                         if st.button("⚡ جاهز للسؤال التالي (تحديث الشاشة)", key=f"sync_next_{qi}", use_container_width=True):
                             st.rerun()
                 else:
@@ -389,7 +420,23 @@ elif st.session_state.curr_page == "player_mode":
                     
             elif rdata["status"] == "finished":
                 st.balloons()
-                st.success("🏆 انتهت جولة التحدي والمنافسة بنجاح! طالع شاشة الموجه لمعرفة الفائز الأول!")
+                total_q = len(rdata["questions"])
+                weight = rdata.get("q_weight", 10)
+                max_score = total_q * weight
+                my_score = rdata["scores"].get(pname, 0)
+                corrects = rdata.get("correct_counts", {}).get(pname, 0)
+                wrongs = total_q - corrects
+                pct = round((my_score / max_score) * 100) if max_score > 0 else 0
+                
+                st.markdown("<h2 style='text-align:center; color:#0369A1;'>📊 داشبورد ونتيجتك النهائية</h2>", unsafe_allow_html=True)
+                
+                col_p1, col_p2, col_p3 = st.columns(3)
+                with col_p1:
+                    st.markdown(f"<div class='dashboard-card'><h3 style='color:#0284C7;'>🎯 مجموع النقاط</h3><h1 style='color:#0369A1;'>{my_score} / {max_score}</h1><p>النسبة: {pct}%</p></div>", unsafe_allow_html=True)
+                with col_p2:
+                    st.markdown(f"<div class='dashboard-card'><h3 style='color:#16A34A;'>✅ الصحيحة</h3><h1 style='color:#15803D;'>{corrects}</h1><p>من {total_q} سؤال</p></div>", unsafe_allow_html=True)
+                with col_p3:
+                    st.markdown(f"<div class='dashboard-card'><h3 style='color:#DC2626;'>❌ الخاطئة</h3><h1 style='color:#B91C1C;'>{wrongs}</h1><p>أسئلة لم توفق بها</p></div>", unsafe_allow_html=True)
 
 # صفحة اختبر نفسك الفردية (ثقف نفسك)
 elif st.session_state.curr_page == "culture_mode":
@@ -410,7 +457,7 @@ elif st.session_state.curr_page == "culture_mode":
         q_weight = st.selectbox("🎯 اختر وزن/درجة كل سؤال في هذه الجولة:", [5, 10, 15, 20], index=1)
         
         if st.button("🎯 ابدأ إطلاق وتوليد المسابقة فوراً", use_container_width=True):
-            with st.spinner("جاري صياغة أسئلة مخصصة نادرة وغير مكررة أبداً عبر جيمني... 🔥"):
+            with st.spinner("جاري صياغة أسئلة عربية واضحة ومفهومة 100% عبر جيمني... 🔥"):
                 target_label = "Children" if solo_target == "قسم الأطفال والأبناء 👶" else "Adults"
                 st.session_state.solo_questions = generate_questions_via_gemini(target_label, solo_topic, int(solo_count), "ar", solo_age)
                 st.session_state.solo_idx = 0
