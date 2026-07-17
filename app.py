@@ -5,7 +5,6 @@ import random
 import os
 import json
 from datetime import datetime
-import google.generativeai as genai
 
 # 1. إعدادات الصفحة والهوية البصرية واستهداف ألوان السماء المريحة للعين
 st.set_page_config(
@@ -72,14 +71,59 @@ if 'curr_page' not in st.session_state: st.session_state.curr_page = "home"
 if 'generated_room_code' not in st.session_state: st.session_state.generated_room_code = None
 if 'admin_authenticated' not in st.session_state: st.session_state.admin_authenticated = False
 if 'lang' not in st.session_state: st.session_state.lang = "ar"
-if 'seen_questions_history' not in st.session_state: st.session_state.seen_questions_history = []
 
-# ربط الـ API الخاص بجيمني بشكل آمن
-api_key = os.environ.get("GEMINI_API_KEY", "")
-if api_key:
-    genai.configure(api_key=api_key)
+# رابط جوجل شيت الخاص بك محول برمجياً لقراءة البيانات الفورية كمستند CSV
+SHEET_ID = "1_Is0imnUnhiyqG49qlvBRdAdbGCADsoNjbdAG2ID7II"
+GOOGLE_SHEET_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
-# دوال الذاكرة الدائمة والمحافظة التراكمية على المسابقات والزيارات التاريخية
+# دالة جلب الأسئلة المباشرة واللحظية من قوقل شيت وتطهير البيانات
+@st.cache_data(ttl=5)  # تحديث الذاكرة كل 5 ثواني فقط ليعمل الريفلكت التلقائي والمباشر
+def load_questions_from_google_sheet():
+    try:
+        df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
+        # إزالة الفراغات من أسماء الأعمدة لتفادي الأخطاء التعبوية
+        df.columns = df.columns.str.strip()
+        return df
+    except Exception as e:
+        st.error("⚠️ فشل الاتصال بجوجل شيت، تأكد من اتصال السيرفر بالإنترنت وبأن الرابط عام.")
+        return pd.DataFrame()
+
+# تصفية وجلب باقة الأسئلة المطلوبة بناءً على الفئة والتصنيف والعمر من الشيت مباشرة دون تكرار
+def fetch_custom_questions(df, category_filter, topic_filter, count, age_filter=None):
+    if df.empty:
+        return []
+    
+    # فلترة الفئة (أطفال أو كبار)
+    filtered_df = df[df['الفئة'].str.strip() == category_filter]
+    
+    # فلترة التصنيف (إسلاميات، علوم، إلخ)
+    filtered_df = filtered_df[filtered_df['التصنيف'].str.strip() == topic_filter]
+    
+    # إذا كانت الفئة أطفال، نحاول المطابقة مع العمر المحدد على السلايدر
+    if category_filter == "أطفال" and age_filter:
+        age_filtered = filtered_df[filtered_df['العمر'].astype(str).str.strip() == str(age_filter)]
+        if not age_filtered.empty:
+            filtered_df = age_filtered
+            
+    # تحويل البيانات إلى القالب البرمجي لغرف المسابقات واختيار عينات عشوائية طازجة
+    pool = []
+    for _, row in filtered_df.iterrows():
+        pool.append({
+            "السؤال": str(row['السؤال']).strip(),
+            "الخيار 1 - الصحيح": str(row['الجواب الصحيح']).strip(),
+            "الخيار 2": str(row['خيار خاطئ 1']).strip(),
+            "الخيار 3": str(row['خيار خاطئ 2']).strip(),
+            "الخيار 4": str(row['خيار خاطئ 3']).strip()
+        })
+        
+    if len(pool) == 0:
+        return []
+        
+    # خلط بنك الأسئلة المفلتر واختيار العدد المطلوب بدقة لمنع التكرار التلقائي في الجولة
+    random.shuffle(pool)
+    return pool[:min(count, len(pool))]
+
+# دوال الذاكرة المحلية والزيارات التراكمية التاريخية للمنصة
 def load_local_data(filename, default_val):
     if os.path.exists(filename):
         with open(filename, "r", encoding="utf-8") as f:
@@ -107,111 +151,6 @@ if 'visitor_logged' not in st.session_state:
     save_local_data("total_v.json", db["total_visitors"])
     st.session_state.visitor_logged = True
 
-# دالة توليد الأسئلة المحدثة بالفصل التام والجامع للتصنيفات ومستويات الأعمار
-def generate_questions_via_gemini(category, topic, count, lang="ar", age=None):
-    try:
-        model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
-        
-        # بصمة فريدة تمنع تكرار الإجابات من الكاش
-        unique_seed = f"REQ_{time.time_ns()}_{random.randint(1000, 9999)}"
-        
-        # 1. تخصيص الفئة العمرية القاطع
-        if age:
-            audience_rules = f"""
-            فئة مستهدفة صريحة: أطفال بعمر ({age}) سنوات فقط.
-            - الأسئلة يجب أن تطابق مدارك طفل عمره {age} سنوات تماماً.
-            - استخدم لغة بسيطة جداً، ممتعة، خفيفة، ومباشرة.
-            - يمنع منعاً باتاً إدراج أسئلة الكبار أو الألغاز المتقدمة.
-            """
-        else:
-            audience_rules = """
-            فئة مستهدفة صريحة: الكبار والشباب (أفكار ثقيفية متقدمة).
-            - صياغة أسئلة عميقة، صعبة، ومثرية علمياً وتاريخياً.
-            - يمنع استخدام أسئلة الأطفال السطحية.
-            """
-
-        # 2. حظر خلط التصنيفات نهائياً (Strict Category Isolation)
-        if topic == "إسلاميات":
-            topic_rules = """
-            المجال المعتمد حصراً: (إسلاميات).
-            - حظر شامل وجامع: يمنع منعاً باتاً ذكر الكواكب، العلوم، الجغرافيا، أو أي موضوع غير إسلامي.
-            - يجب أن تكون جميع الأسئلة الـ 100% عن: القرآن الكريم، السيرة النبوية الشريفة، أركان الإسلام، الصحابة، الفقه والعبادات.
-            """
-        elif topic == "لغة عربية":
-            topic_rules = """
-            المجال المعتمد حصراً: (لغة عربية).
-            - كافة الأسئلة يجب أن تتناول: النحو، الصرف، البلاغة، معاني المفردات، أو الأدب العربي فقط.
-            """
-        elif topic == "علوم":
-            topic_rules = """
-            المجال المعتمد حصراً: (علوم وطبيعة).
-            - كافة الأسئلة يجب أن تتناول: الأحياء، الفيزياء، الكيمياء، الفلك، أو جسم الإنسان فقط.
-            """
-        elif topic == "رياضيات":
-            topic_rules = """
-            المجال المعتمد حصراً: (رياضيات وعمليات حسابية).
-            - كافة الأسئلة يجب أن تتناول: المسائل الحسابية، الهندسة، أو الأرقام المتناسبة مع الفئة العمرية.
-            """
-        else:
-            topic_rules = f"المجال المعتمد حصراً: ({topic}). اتبع هذا المجال بدقة 100% دون الخروج عنه."
-
-        prompt = f"""
-        معرف الفرادة: {unique_seed}
-        أنت الخبير الأول في تصميم المناهج والمسابقات بالمملكة العربية السعودية.
-        المطلوب: توليد ({count}) أسئلة متعددة الخيارات فريدة وغير مكررة مطلقاً.
-
-        {audience_rules}
-        {topic_rules}
-
-        شروط الإخراج:
-        1. "السؤال": نص واضح ينتمي 100% للمجال والفئة العمرية المحددة.
-        2. "الخيار 1 - الصحيح": الإجابة الصحيحة الأكيدة.
-        3. "الخيار 2", "الخيار 3", "الخيار 4": خيارات خاطئة واضحة ومنطقية لنفس المجال.
-
-        قم بإنشاء النتيجة كـ JSON Array بالمفاتيح التالية فقط:
-        - "السؤال"
-        - "الخيار 1 - الصحيح"
-        - "الخيار 2"
-        - "الخيار 3"
-        - "الخيار 4"
-        """
-        
-        relative_resp = model.generate_content(prompt)
-        text_clean = relative_resp.text.strip()
-        parsed_data = json.loads(text_clean)
-        
-        valid_questions = [q for q in parsed_data if "السؤال" in q and "الخيار 1 - الصحيح" in q]
-        
-        if len(valid_questions) > 0:
-            return valid_questions
-            
-    except Exception as e:
-        pass
-
-    # بنك أمان متخصص مقسم بدقة
-    if topic == "إسلاميات":
-        if age and age <= 10:
-            fallback = [
-                {"السؤال": "ما هو كتاب الله الذي أنزله على نبينا محمد؟", "الخيار 1 - الصحيح": "القرآن الكريم", "الخيار 2": "التوراة", "الخيار 3": "الإنجيل", "الخيار 4": "الزبور"},
-                {"السؤال": "من هو نبينا وخاتم الأنبياء؟", "الخيار 1 - الصحيح": "محمد صلى الله عليه وسلم", "الخيار 2": "إبراهيم عليه السلام", "الخيار 3": "موسى عليه السلام", "الخيار 4": "عيسى عليه السلام"},
-                {"السؤال": "كم عدد أركان الإسلام؟", "الخيار 1 - الصحيح": "5 أركان", "الخيار 2": "3 أركان", "الخيار 3": "6 أركان", "الخيار 4": "4 أركان"},
-                {"السؤال": "ما هي القبلة التي يتجه إليها المسلمون في صلاتهم؟", "الخيار 1 - الصحيح": "الكعبة المشرفة", "الخيار 2": "المسجد الأقصى", "الخيار 3": "جبل أحد", "الخيار 4": "غار حراء"}
-            ]
-        else:
-            fallback = [
-                {"السؤال": "ما هي أعظم سورة في القرآن الكريم؟", "الخيار 1 - الصحيح": "سورة الفاتحة", "الخيار 2": "سورة البقرة", "الخيار 3": "سورة يس", "الخيار 4": "سورة الإخلاص"},
-                {"السؤال": "من هو الصحابي الجليل الملقب بالفاروق؟", "الخيار 1 - الصحيح": "عمر بن الخطاب", "الخيار 2": "أبو بكر الصديق", "الخيار 3": "عثمان بن عفان", "الخيار 4": "علي بن أبي طالب"},
-                {"السؤال": "في أي سنة هجرية كانت غزوة بدر الكبرى؟", "الخيار 1 - الصحيح": "السنة 2 هجرية", "الخيار 2": "السنة 3 هجرية", "الخيار 3": "السنة 5 هجرية", "الخيار 4": "السنة 8 هجرية"},
-                {"السؤال": "كم عدد أجزاء القرآن الكريم؟", "الخيار 1 - الصحيح": "30 جزءاً", "الخيار 2": "60 جزءاً", "الخيار 3": "25 جزءاً", "الخيار 4": "40 جزءاً"}
-            ]
-    else:
-        fallback = [
-            {"السؤال": "ما هي عاصمة المملكة العربية السعودية؟", "الخيار 1 - الصحيح": "الرياض", "الخيار 2": "جدة", "الخيار 3": "الدمام", "الخيار 4": "مكة المكرمة"},
-            {"السؤال": "ما هو العلم الذي يدرس أجرام الفضاء والنجوم؟", "الخيار 1 - الصحيح": "علم الفلك", "الخيار 2": "علم الأحياء", "الخيار 3": "علم الجغرافيا", "الخيار 4": "علم الفيزياء"}
-        ]
-    random.shuffle(fallback)
-    return fallback[:count]
-
 # هيدر التنقل العلوي
 col_nav1, col_nav2, col_nav3, col_nav4 = st.columns([1, 1, 1, 1])
 if col_nav1.button("🏠 الرئيسية", use_container_width=True): st.session_state.curr_page = "home"; st.rerun()
@@ -224,6 +163,9 @@ if col_nav4.button(current_lang_label, use_container_width=True):
 
 st.write("---")
 
+# جلب قاعدة الأسئلة المحدثة فوراً في الذاكرة الحالية
+sheet_data = load_questions_from_google_sheet()
+
 # الصفحة الرئيسية للمنصة
 if st.session_state.curr_page == "home":
     st.markdown("<h2 style='text-align:center; color:#0369A1;'>منصة مسابقات هيا الفاخرة  🎯</h2>", unsafe_allow_html=True)
@@ -232,12 +174,12 @@ if st.session_state.curr_page == "home":
         
     st.markdown("<p style='text-align:center; font-size:1.3rem;'>جاهزون للتحدي والمنافسة الحية المباشرة الحين؟</p>", unsafe_allow_html=True)
     
-    if st.button("🏆 إنشاء وإدارة مسابقة ذكية حية (عبر جيمني AI)", use_container_width=True): st.session_state.curr_page = "admin_mode"; st.rerun()
+    if st.button("🏆 إنشاء وإدارة مسابقة ذكية حية (من جوجل شيت)", use_container_width=True): st.session_state.curr_page = "admin_mode"; st.rerun()
     if st.button("📝 نظام الموجه لتركيب أسئلة يدوية مخصصة", use_container_width=True): st.session_state.curr_page = "manual_setup_mode"; st.rerun()
     if st.button("🎮 دخول كمتسابق في جولة حية", use_container_width=True): st.session_state.curr_page = "player_mode"; st.rerun()
-    if st.button("🕹️ تحدي اختبر نفسك الفردي (ثقّف نفسك الفوري)", use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
+    if st.button("🕹️ تحدي اختبر نفسك الفردي (ثقّف نفسك الفوري من الشيت)", use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
 
-# 📝 نظام الموجه لتركيب وحفظ أسئلة يدوية مخصصة
+# نظام الموجه لتركيب وحفظ أسئلة يدوية مخصصة
 elif st.session_state.curr_page == "manual_setup_mode":
     st.markdown("<h2 style='text-align:center; color:#0369A1;'>📝 لوحة تصميم وحفظ المسابقات اليدوية</h2>", unsafe_allow_html=True)
     
@@ -266,35 +208,36 @@ elif st.session_state.curr_page == "manual_setup_mode":
             db["manual_pools"][pool_code] = manual_list
             save_local_data("manual_pools.json", db["manual_pools"])
             st.success(f"🎉 تم حفظ مسابقتك بنجاح في السيرفر! الرمز المميز الخاص بها هو: **{pool_code}**")
-            st.info("انسخ هذا الرقم الآن واذهب لقسم إنشاء الغرف لإطلاقها للمشتركين.")
         else:
             st.error("الرجاء تعبئة الأسئلة والأجوبة الصحيحة أولاً قبل الحفظ!")
 
-# لوحة الموجه وإدارة الغرف الحية
+# لوحة الموجه وإدارة الغرف الحية المربوطة بالشيت بالكامل
 elif st.session_state.curr_page == "admin_mode":
     st.markdown("<h2 style='text-align:center; color:#0369A1;'>🏆 لوحة التحكم وإطلاق الغرف الحية</h2>", unsafe_allow_html=True)
     
     if 'my_live_room' not in st.session_state:
-        mode_select = st.radio("⚙️ اختر نوع ونظام الأسئلة للجولة الحالية:", ["توليد تلقائي ذكي عبر جيمني AI", "استدعاء مسابقة يدوية محفوظة برقم مميز"])
+        mode_select = st.radio("⚙️ اختر نظام جلب الأسئلة للجولة الحالية:", ["سحب تلقائي مباشر من جدول Google Sheets", "استدعاء مسابقة يدوية محفوظة برقم مميز"])
         
         chosen_questions = []
         t_val = 30
         
         live_q_weight = st.selectbox("🎯 اختر وزن/درجة كل سؤال في هذه الجولة الحية:", [5, 10, 15, 20], index=1)
         
-        if mode_select == "توليد تلقائي ذكي عبر جيمني AI":
+        if mode_select == "سحب تلقائي مباشر من جدول Google Sheets":
             q_src = st.radio("اختر الفئة المستهدفة:", ["قسم الأطفال والأبناء 👶", "قسم الكبار والشباب 🧔"])
             chosen_age = None
             if q_src == "قسم الأطفال والأبناء 👶":
-                chosen_age = st.slider("حدد عمر الطفل بدقة لضبط جودة وصعوبة الأسئلة (من 6 إلى 17 سنة):", 6, 17, 10)
-            q_topic = st.selectbox("اختر تصنيف ومجال الجولة الحالية:", ["إسلاميات", "لغة عربية", "علوم", "رياضيات", "اجتماعيات", "طبيعة وجغرافيا", "ثقافة عامة منوعة"])
-            num_q = st.number_input("حدد عدد الأسئلة المطلوبة:", min_value=1, max_value=20, value=5)
+                chosen_age = st.slider("حدد عمر الطفل بدقة لفلترة وتطابق الأسئلة المتوفرة في الشيت (من 6 إلى 17 سنة):", 6, 17, 7)
+                
+            q_topic = st.selectbox("اختر تصنيف ومجال الجولة الحالية:", ["إسلاميات", "لغة عربية", "علوم", "رياضيات", "اجتماعيات", "طبيعة وجغرافيا", "ثقافة عامة"])
+            num_q = st.number_input("حدد عدد الأسئلة المطلوبة للحلبة التنافسية:", min_value=1, max_value=50, value=5)
             t_val = st.slider("الوقت المتاح لكل سؤال (ثواني):", 5, 60, 30)
             
-            if st.button("🎲 إنشاء غرفتك عبر الذكاء الاصطناعي", use_container_width=True):
-                with st.spinner("جاري صياغة أسئلة فريدة ومنضبطة بالمجال والعمر تماماً... ⚡"):
-                    target_tag = "Children" if q_src == "قسم الأطفال والأبناء 👶" else "Adults"
-                    chosen_questions = generate_questions_via_gemini(target_tag, q_topic, int(num_q), "ar", chosen_age)
+            if st.button("🎲 استخراج الأسئلة الفورية وإطلاق الغرفة الحية الحين", use_container_width=True):
+                target_tag = "أطفال" if q_src == "قسم الأطفال والأبناء 👶" else "كبار"
+                chosen_questions = fetch_custom_questions(sheet_data, target_tag, q_topic, int(num_q), chosen_age)
+                if len(chosen_questions) == 0:
+                    st.error(f"⚠️ لم نجد أسئلة كافية في جدول قوقل تطابق هذه الفلاتر: ({target_tag} - {q_topic}). يرجى إضافة المزيد في الشيت وسيقرأها الموقع تلقائياً!")
         else:
             input_pool_id = st.text_input("📝 أدخل رقم المسابقة المميز الذي قمت بحفظه مسبقاً:")
             t_val = st.slider("الوقت المتاح لكل سؤال (ثواني):", 5, 60, 30)
@@ -316,6 +259,7 @@ elif st.session_state.curr_page == "admin_mode":
                 "scores": {}, "correct_counts": {}, "player_answers": {}, 
                 "q_weight": live_q_weight, "q_start_time": time.time()
             }
+            st.write(f"🎉 تم حجز الغرفة بنجاح وبانتظار المشتركين.")
             st.rerun()
     else:
         rid = st.session_state.my_live_room; rdata = db["rooms"].get(rid)
@@ -331,7 +275,7 @@ elif st.session_state.curr_page == "admin_mode":
                 qi = rdata["current_q_idx"]; ql = rdata["questions"]
                 if qi < len(ql):
                     st.markdown(f"<div class='question-text'>📊 السؤال الحالي ({qi+1}/{len(ql)}): {ql[qi]['السؤال']}</div>", unsafe_allow_html=True)
-                    st.success(f"💡 الإجابة الصحيحة المعتمدة: **{ql[qi]['الخيار 1 - الصحيح']}**")
+                    st.success(f"💡 الإجابة الصحيحة المعتمدة في الجدول: **{ql[qi]['الخيار 1 - الصحيح']}**")
                     
                     st.markdown("#### 👁️ شاشة رصد ومراقبة إجابات المشتركين اللحظية:")
                     for p in rdata["players"]:
@@ -491,7 +435,7 @@ elif st.session_state.curr_page == "player_mode":
                 with col_p3:
                     st.markdown(f"<div class='dashboard-card'><h3 style='color:#DC2626;'>❌ الخاطئة</h3><h1 style='color:#B91C1C;'>{wrongs}</h1><p>أسئلة لم توفق بها</p></div>", unsafe_allow_html=True)
 
-# صفحة اختبر نفسك الفردية (ثقف نفسك)
+# صفحة اختبر نفسك الفردية (ثقف نفسك بسحب مباشر وحقيقي من جوجل شيت)
 elif st.session_state.curr_page == "culture_mode":
     st.markdown("<h2 style='text-align:center; color:#0369A1;'>🕹️ تحدي اختبر نفسك الفردي (ثقّف نفسك)</h2>", unsafe_allow_html=True)
     
@@ -501,22 +445,26 @@ elif st.session_state.curr_page == "culture_mode":
         solo_target = st.radio("اختر الفئة المستهدفة للتحدي:", ["قسم الأطفال والأبناء 👶", "قسم الكبار والشباب 🧔"])
         solo_age = None
         if solo_target == "قسم الأطفال والأبناء 👶":
-            solo_age = st.slider("حدد عمر الطفل بدقة (من 6 إلى 17 سنة):", 6, 17, 10)
+            solo_age = st.slider("حدد عمر الطفل بدقة (من 6 إلى 17 سنة):", 6, 17, 7)
             
-        solo_topic = st.selectbox("اختر المجال أو الفئة:", ["إسلاميات", "لغة عربية", "علوم", "رياضيات", "اجتماعيات", "طبيعة وجغرافيا", "ثقافة عامة منوعة"])
+        solo_topic = st.selectbox("اختر المجال أو الفئة السحابية:", ["إسلاميات", "لغة عربية", "علوم", "رياضيات", "اجتماعيات", "طبيعة وجغرافيا", "ثقافة عامة"])
         solo_count = st.slider("حدد عدد الأسئلة المطلوبة في هذه الجولة:", 1, 20, 5)
         
         q_weight = st.selectbox("🎯 اختر وزن/درجة كل سؤال في هذه الجولة:", [5, 10, 15, 20], index=1)
         
-        if st.button("🎯 ابدأ إطلاق وتوليد المسابقة فوراً", use_container_width=True):
-            with st.spinner("جاري صياغة أسئلة جديدة منضبطة بالمجال والعمر 100%... 🔥"):
-                target_label = "Children" if solo_target == "قسم الأطفال والأبناء 👶" else "Adults"
-                st.session_state.solo_questions = generate_questions_via_gemini(target_label, solo_topic, int(solo_count), "ar", solo_age)
+        if st.button("🎯 ابدأ التحدي الفوري من بنك جوجل شيت", use_container_width=True):
+            target_label = "أطفال" if solo_target == "قسم الأطفال والأبناء 👶" else "كبار"
+            fetched_qs = fetch_custom_questions(sheet_data, target_label, solo_topic, int(solo_count), solo_age)
+            
+            if len(fetched_qs) > 0:
+                st.session_state.solo_questions = fetched_qs
                 st.session_state.solo_idx = 0
                 st.session_state.solo_correct_cnt = 0
                 st.session_state.solo_wrong_cnt = 0
                 st.session_state.q_weight = q_weight
-            st.rerun()
+                st.rerun()
+            else:
+                st.error(f"⚠️ لم يعثر النظام على أسئلة تطابق الخيارات المحددة في الشيت حالياً. تذكر أنك تمتلك لوحة إدارة لمراقبة أعداد الأسئلة بالأسفل!")
     else:
         sq = st.session_state.solo_questions; si = st.session_state.solo_idx
         weight = st.session_state.get('q_weight', 10)
@@ -556,42 +504,14 @@ elif st.session_state.curr_page == "culture_mode":
             st.markdown("<h2 style='text-align:center; color:#0369A1;'>📊 لوحة النتائج والداشبورد النهائي</h2>", unsafe_allow_html=True)
             
             col_d1, col_d2, col_d3 = st.columns(3)
-            
             with col_d1:
-                st.markdown(f"""
-                <div class='dashboard-card'>
-                    <h3 style='color:#0284C7;'>🎯 الدرجة الكلية</h3>
-                    <h1 style='color:#0369A1; font-size:2.5rem;'>{earned_score} / {max_score}</h1>
-                    <p style='color:#475569;'>النسبة المئوية: {percentage}%</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
+                st.markdown(f"<div class='dashboard-card'><h3 style='color:#0284C7;'>🎯 الدرجة الكلية</h3><h1 style='color:#0369A1; font-size:2.5rem;'>{earned_score} / {max_score}</h1><p>النسبة المئوية: {percentage}%</p></div>", unsafe_allow_html=True)
             with col_d2:
-                st.markdown(f"""
-                <div class='dashboard-card'>
-                    <h3 style='color:#16A34A;'>✅ الإجابات الصحيحة</h3>
-                    <h1 style='color:#15803D; font-size:2.5rem;'>{correct_cnt}</h1>
-                    <p style='color:#475569;'>من إجمالي {total_q} سؤال</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
+                st.markdown(f"<div class='dashboard-card'><h3 style='color:#16A34A;'>✅ الإجابات الصحيحة</h3><h1 style='color:#15803D; font-size:2.5rem;'>{correct_cnt}</h1><p>من إجمالي {total_q} سؤال</p></div>", unsafe_allow_html=True)
             with col_d3:
-                st.markdown(f"""
-                <div class='dashboard-card'>
-                    <h3 style='color:#DC2626;'>❌ الإجابات الخاطئة</h3>
-                    <h1 style='color:#B91C1C; font-size:2.5rem;'>{wrong_cnt}</h1>
-                    <p style='color:#475569;'>أسئلة تحتاج لمراجعة</p>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"<div class='dashboard-card'><h3 style='color:#DC2626;'>❌ الإجابات الخاطئة</h3><h1 style='color:#B91C1C; font-size:2.5rem;'>{wrong_cnt}</h1><p>أسئلة تحتاج لمراجعة</p></div>", unsafe_allow_html=True)
                 
-            if percentage >= 80:
-                st.success("🌟 ممتاز جداً! أداء استثنائي ونتيجة مشرّفة!")
-            elif percentage >= 50:
-                st.info("👍 جيد جداً! أداء طيب ومحاولة ممتازة.")
-            else:
-                st.warning("💪 محاولة جيدة! واصل التحدي وستحقق نتيجة أفضل المرة القادمة.")
-                
-            if st.button("🔄 بدء جولة تحدي جديدة بأسئلة مغايرة تماماً", use_container_width=True):
+            if st.button("🔄 جولة تحدي جديدة بمجال آخر", use_container_width=True):
                 for key in list(st.session_state.keys()):
                     if key.startswith("solo_opt_") or key.startswith("sl_r_"): del st.session_state[key]
                 del st.session_state.solo_questions
@@ -613,8 +533,8 @@ elif st.session_state.curr_page == "contact_mode":
 
 st.write("---")
 
-# 📥 صندوق الإعدادات والرسائل والزيارات التراكمية التاريخية بأسفل الصفحة
-with st.expander("⚙️ إعدادات لوحة الموجه (خاص بالمدير فقط)"):
+# صندوق الإعدادات والرسائل ولوحة إحصائيات الأسئلة والأعمار المزامنة التاريخية بأسفل الصفحة
+with st.expander("⚙️ لوحة الموجه والتحليلات المتقدمة وجوجل شيت (خاص بالأدمن فقط)"):
     if not st.session_state.admin_authenticated:
         admin_pass = st.text_input("🔑 أدخل الرمز السري لوحة الموجه:", type="password", key="main_admin_pass")
         if st.button("🔓 تأكيد الدخول", key="main_admin_confirm"):
@@ -626,6 +546,37 @@ with st.expander("⚙️ إعدادات لوحة الموجه (خاص بالمد
         if st.button("🚪 خروج من الإدارة", key="main_admin_logout"):
             st.session_state.admin_authenticated = False
             st.rerun()
+        st.write("---")
+        
+        st.markdown("<h3 style='color:#0284C7;'>📊 لوحة رصد وإحصائيات الأسئلة التزامنية التلقائية (من جوجل شيت)</h3>", unsafe_allow_html=True)
+        
+        if not sheet_data.empty:
+            total_questions_in_sheet = len(sheet_data)
+            
+            # فلترة وحساب التصنيفات والفئات برمجياً
+            kids_q_count = len(sheet_data[sheet_data['الفئة'].str.strip() == 'أطفال'])
+            adults_q_count = len(sheet_data[sheet_data['الفئة'].str.strip() == 'كبار'])
+            
+            col_st1, col_st2, col_st3 = st.columns(3)
+            with col_st1:
+                st.metric(label="📈 العدد الكلي للأسئلة المكتشفة في الشيت حالياً", value=f"{total_questions_in_sheet} سؤال")
+            with col_st2:
+                st.metric(label="👶 إجمالي أسئلة قسم الأطفال والأبناء", value=f"{kids_q_count} سؤال")
+            with col_st3:
+                st.metric(label="🧔 إجمالي أسئلة قسم الشباب والكبار", value=f"{adults_q_count} سؤال")
+                
+            st.markdown("#### 📁 أعداد توزيع الأسئلة الحالية بالتفصيل حسب التصنيفات:")
+            topics_list = ["إسلاميات", "لغة عربية", "علوم", "رياضيات", "اجتماعيات", "طبيعة وجغرافيا", "ثقافة عامة"]
+            col_t1, col_t2, col_t3, col_t4 = st.columns(4)
+            cols_cycle = [col_t1, col_t2, col_t3, col_t4]
+            
+            for i, t_name in enumerate(topics_list):
+                count_t = len(sheet_data[sheet_data['التصنيف'].str.strip() == t_name])
+                with cols_cycle[i % 4]:
+                    st.write(f"- **{t_name}:** {count_t} سؤال")
+        else:
+            st.info("لم يتم جلب أي بيانات أسئلة بعد، يرجى ملء جدول جوجل شيت بالبيانات.")
+
         st.write("---")
         col_m1, col_m2 = st.columns(2)
         st.metric(label="📊 المتواجدون حالياً", value="1 منشط")
@@ -639,7 +590,6 @@ with st.expander("⚙️ إعدادات لوحة الموجه (خاص بالمد
             for idx, msg in enumerate(db["messages"]):
                 with st.expander(f"✉️ من: {msg.get('name', 'مجهول')}"):
                     st.write(f"**الجوال:** {msg.get('phone', 'غير متوفر')}")
-                    st.write(f"**البريد:** {msg.get('email', 'غير متوفر')}")
                     st.write(f"**الرسالة:** {msg.get('msg', '')}")
                     if st.button("🗑️ حذف الرسالة", key=f"del_main_{idx}"):
                         db["messages"].pop(idx)
