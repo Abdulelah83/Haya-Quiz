@@ -5,6 +5,7 @@ import random
 import os
 import json
 from datetime import datetime
+if 'seen_questions' not in st.session_state: st.session_state.seen_questions = []
 
 # 1. إعدادات الصفحة والهوية البصرية واستهداف ألوان السماء المريحة للعين
 st.set_page_config(
@@ -86,27 +87,18 @@ def load_questions_from_google_sheet():
     except Exception as e:
         return pd.DataFrame()
 
-# دالة فلترة الأسئلة الذكية والمرنة لحل مشكلة النقص في عدد الأسئلة للأطفال
 def fetch_custom_questions(df, category_filter, topic_filter, count, age_filter=None):
-    if df.empty:
-        return []
-    
-    # 1. التصفية حسب الفئة الأساسية والتصنيف المعتمد
+    if df.empty: return []
     filtered_df = df[(df['الفئة'].str.strip() == category_filter) & (df['التصنيف'].str.strip() == topic_filter)]
     
-    # 2. في حال فئة الأطفال، نطبق الفلترة المرنة للأعمار المتقاربة
-    if category_filter == "أطفال" and age_filter:
-        exact_age_df = filtered_df[filtered_df['العمر'].astype(str).str.strip() == str(age_filter)]
+    # منع التكرار
+    available_df = filtered_df[~filtered_df['السؤال'].isin(st.session_state.seen_questions)]
+    if len(available_df) == 0:
+        st.session_state.seen_questions = [] 
+        available_df = filtered_df
         
-        # إذا وجدنا أسئلة كافية تطابق العمر بالضبط نعتمدها
-        if len(exact_age_df) >= count:
-            filtered_df = exact_age_df
-        else:
-            # إذا كانت أقل، ندمج معها بقية أسئلة فئة الأطفال لنفس التصنيف لضمان اكتمال العدد المطلق (5 أسئلة مثلاً)
-            pass
-
     pool = []
-    for _, row in filtered_df.iterrows():
+    for _, row in available_df.iterrows():
         pool.append({
             "السؤال": str(row['السؤال']).strip(),
             "الخيار 1 - الصحيح": str(row['الجواب الصحيح']).strip(),
@@ -114,12 +106,13 @@ def fetch_custom_questions(df, category_filter, topic_filter, count, age_filter=
             "الخيار 3": str(row['خيار خاطئ 2']).strip(),
             "الخيار 4": str(row['خيار خاطئ 3']).strip()
         })
-        
-    if len(pool) == 0:
-        return []
-        
+    
     random.shuffle(pool)
-    return pool[:min(count, len(pool))]
+    selected = pool[:min(count, len(pool))]
+    
+    # تسجيل الأسئلة الجديدة في الذاكرة
+    for q in selected: st.session_state.seen_questions.append(q["السؤال"])
+    return selected
 
 # دوال الذاكرة المحلية والزيارات التراكمية التاريخية للمنصة
 def load_local_data(filename, default_val):
@@ -483,7 +476,7 @@ elif st.session_state.curr_page == "contact_mode":
 st.write("---")
 
 # صندوق الإعدادات والرسائل ولوحة إحصائيات الأسئلة والأعمار المزامنة التاريخية بأسفل الصفحة
-with st.expander("⚙️ لوحة الموجه والتحليلات المتقدمة وجوجل شيت (خاص بالأدمن فقط)"):
+with st.expander("⚙️"):
     if not st.session_state.admin_authenticated:
         admin_pass = st.text_input("🔑 أدخل الرمز السري لوحة الموجه:", type="password", key="main_admin_pass")
         if st.button("🔓 تأكيد الدخول", key="main_admin_confirm"):
