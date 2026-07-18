@@ -411,12 +411,18 @@ elif st.session_state.curr_page == "culture_mode":
             fetched_qs = fetch_custom_questions(sheet_data, target_label, solo_topic, int(solo_count), solo_age)
             
             if len(fetched_qs) > 0:
+                # --- إضافة سطر الخلط هنا لمنع التكرار ---
+                import random 
+                random.shuffle(fetched_qs)
+                # ----------------------------------------
+                
                 st.session_state.solo_questions = fetched_qs
                 st.session_state.solo_idx = 0
                 st.session_state.solo_correct_cnt = 0
                 st.session_state.solo_wrong_cnt = 0
                 st.session_state.q_weight = q_weight
                 st.rerun()
+
             else:
                 st.error(f"⚠️ لم يعثر النظام على أسئلة كافية تطابق الخيارات المحددة في الشيت حالياً. يرجى إضافة الأسئلة في الشيت لتظهر هنا فوراً!")
     else:
