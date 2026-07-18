@@ -78,8 +78,9 @@ SHEET_ID = "1_Is0imnUnhiyqG49qlvBRdAdbGCADsoNjbdAG2ID7II"
 GOOGLE_SHEET_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
 # دالة جلب الأسئلة المباشرة واللحظية من قوقل شيت وتطهير البيانات
-@st.cache_data(ttl=2)  # تقليل الكاش لثانيتين لضمان المزامنة الفورية عند التعديل في الشيت
-def load_questions_from_google_sheet():
+@st.cache_data(ttl=2, show_spinner=False)
+def load_questions_from_google_sheet():  # تقليل الكاش لثانيتين لضمان المزامنة الفورية عند التعديل في الشيت
+
     try:
         df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
         df.columns = df.columns.str.strip()
@@ -159,16 +160,16 @@ sheet_data = load_questions_from_google_sheet()
 
 # الصفحة الرئيسية للمنصة
 if st.session_state.curr_page == "home":
-    st.markdown("<h2 style='text-align:center; color:#0369A1;'>منصة مسابقات هيا الفاخرة  🎯</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center; color:#0369A1;'>مسابقات هيا   🎯</h2>", unsafe_allow_html=True)
     if os.path.exists("my_kids.png"): 
         st.image("my_kids.png", use_container_width=True)
         
     st.markdown("<p style='text-align:center; font-size:1.3rem;'>جاهزون للتحدي والمنافسة الحية المباشرة الحين؟</p>", unsafe_allow_html=True)
     
-    if st.button("🏆 إنشاء وإدارة مسابقة ذكية حية (من جوجل شيت)", use_container_width=True): st.session_state.curr_page = "admin_mode"; st.rerun()
-    if st.button("📝 نظام الموجه لتركيب أسئلة يدوية مخصصة", use_container_width=True): st.session_state.curr_page = "manual_setup_mode"; st.rerun()
+    if st.button("🏆 إنشاء وإدارة مسابقة ذكية حية", use_container_width=True): st.session_state.curr_page = "admin_mode"; st.rerun()
+    if st.button("📝 كتابة اسئلة يدوية مخصّصة", use_container_width=True): st.session_state.curr_page = "manual_setup_mode"; st.rerun()
     if st.button("🎮 دخول كمتسابق في جولة حية", use_container_width=True): st.session_state.curr_page = "player_mode"; st.rerun()
-    if st.button("🕹️ تحدي اختبر نفسك الفردي (ثقّف نفسك الفوري من الشيت)", use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
+    if st.button("🕹️ تحدي اختبر نفسك الفردي", use_container_width=True): st.session_state.curr_page = "culture_mode"; st.rerun()
 
 # نظام الموجه لتركيب وحفظ أسئلة يدوية مخصصة
 elif st.session_state.curr_page == "manual_setup_mode":
